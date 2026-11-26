@@ -817,6 +817,7 @@ ipcMain.on('openLogs', () => {
 })
 // Interview timer + markers (buttons in the UI)
 function saveInterview() {
+  if (process.env.ATEM_ALERT_DEMO) return
   settings.interview = st.interview // survives an app restart/crash
   saveSettings()
 }
@@ -898,6 +899,39 @@ ipcMain.on('simulate', (_e, what) => {
   publish()
 })
 
+// ---------- Demo mode (for README screenshots) ----------
+// ATEM_ALERT_DEMO=recording|alarm|warning shows example data and does NOT connect to the ATEM
+function setupDemo(demo) {
+  const now = Date.now()
+  st.connection = 'connected'
+  st.model = 'ATEM Mini Pro ISO'
+  const left = demo === 'warning' ? 24 * 60 : 4 * 3600 + 41 * 60
+  st.rec = {
+    state: demo === 'alarm' ? 'idle' : 'recording', errorRaw: REC_ERROR_NONE, errors: [], durationSec: 0,
+    timeAvailableSec: left, filename: 'Interview 2026-11-26',
+    disks: [{ id: 0, name: 'SSD', timeAvailableSec: left, status: demo === 'alarm' ? 'active' : 'recording' }],
+  }
+  st.recStartedAt = demo === 'alarm' ? null : now - 754000
+  st.interview = { state: 'running', startedAt: now - 591000, endedAt: null, startRec: 163, startTc: '14:02:43:12', marks: 2, lastMark: null }
+  if (demo === 'alarm')
+    st.alarm = { level: 'red', kind: 'unexpected', title: 'UNEXPECTED RECORDING STOP!', detail: 'Disk error (disk disconnected or failed?) · recorded 00:12:34 · INTERVIEW WAS RUNNING (00:09:51)', time: now }
+  audioChannels = [
+    { key: '2:-65280', name: 'HDMI 2', enabled: true },
+    { key: '3:-65280', name: 'HDMI 3', enabled: true },
+    { key: '1302:-65280', name: 'Mic 2', enabled: true },
+    { key: 'master', name: 'MASTER', enabled: true, master: true },
+  ]
+  const lv = (l, r) => ({ l, r, lp: Math.max(l, r) + 4, rp: Math.max(l, r) + 3 })
+  const levels = { '2:-65280': lv(-24, -26), '3:-65280': lv(-36, -38), '1302:-65280': lv(-12, -13), master: lv(-14, -15) }
+  setInterval(() => {
+    lastLoudAudioAt = Date.now()
+    send('levels', levels)
+  }, 100)
+  send('audioChannels', audioChannels)
+  updateWarnings()
+  publish()
+}
+
 // ---------- Startup ----------
 // Dev helper: ATEM_ALERT_USERDATA=<folder> keeps test settings/logs away from the real ones
 if (process.env.ATEM_ALERT_USERDATA) app.setPath('userData', process.env.ATEM_ALERT_USERDATA)
@@ -925,7 +959,8 @@ if (isFirstInstance) app.whenReady().then(() => {
   // stop the OS from suspending us (timers, network) during long sessions
   powerSaveBlocker.start('prevent-app-suspension')
   createWindow()
-  connectAtem()
+  if (process.env.ATEM_ALERT_DEMO) setupDemo(process.env.ATEM_ALERT_DEMO)
+  else connectAtem()
   startTimers()
   log('APP', `ATEM Recording Alert ${app.getVersion()} started. Logs: ${logDir()}`)
   cleanupOldFiles()

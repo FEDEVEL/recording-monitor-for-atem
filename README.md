@@ -1,115 +1,243 @@
-# ATEM Recording Alert
+<p align="center">
+  <img src="build/icon.png" width="96" alt="ATEM Recording Alert icon">
+</p>
 
-Small desktop app that watches an **ATEM Mini Pro ISO** over the network and makes it impossible to miss
-that recording has stopped.
+<h1 align="center">ATEM Recording Alert</h1>
 
-## What it shows
-- **Big status panel**
-  - grey **NOT RECORDING**: idle, ready
-  - green **● RECORDING 00:12:34**: recording, all fine
-  - yellow **● RECORDING**: recording, but there is a warning (see the yellow bars)
-  - flashing red **RECORDING STOPPED** / **UNEXPECTED RECORDING STOP!** / **LOST CONNECTION**: stays until you click *OK*
-- **Yellow warning bars**: low disk space (< 30 min), no disk, disk unformatted/removed, ATEM error flags
-  while recording (e.g. dropping frames), recording timer not advancing, no audio on MASTER for 20 s, not connected.
-- **Interview timer** (blue bar): press **▶ START INTERVIEW** when the interview really begins.
-  The big timer shows the interview length (independent of the recording timer). **⚑ Mark** notes a moment
-  (e.g. something to cut), **■ End** stops the timer, **↺ Resume** undoes an accidental End, **▶ New** starts
-  timing the next interview. Each press gives a short beep (rising = start, falling = end, blip = mark).
-  The timer survives an app restart. *Start* is only possible while the ATEM is recording (greyed out otherwise);
-  interview time only counts while recording, so when recording stops a running interview ends with it
-  ("ended because recording stopped"). *Resume* and *New* also work only while recording. When a new recording starts, an ended interview is
-  cleared; for up to 60 min a small **↺ Resume previous** button lets you continue it (the pause between recordings
-  is not counted).
-- **Cursor check**: while the interview timer runs, a flashing orange banner appears if the mouse cursor has been
-  outside this app's window for more than 3 s (it could be visible over the cameras / shared screen in the
-  recording). Optional soft beep. Both can be switched in ⚙ (*Cursor check*, *Cursor beep*).
-- **Session files**: one text file per recording (⚙ → *Open session files*) with computer time, position in the
-  recording file and **ATEM timecode** (the same timecode the ATEM writes into the recorded files, so it matches
-  the DaVinci Resolve timeline) for: recording start, interview start/end, marks, recording stop/alarms. Useful for editing.
-  A `~` before the recording time means approximate (the app was started while the ATEM was already recording).
-- **Audio meters** for every channel that is switched on in the ATEM mixer, plus MASTER.
+<p align="center">
+  <b>Never lose an interview again because your ATEM silently stopped recording.</b><br>
+  A small desktop app that watches a Blackmagic ATEM Mini Pro / ISO over the network,<br>
+  shows the recording status in big letters and alerts you, on screen and in your headphones, the moment recording stops.
+</p>
 
-## Sounds (in your headphones, from the computer's default audio output)
+<p align="center">
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS-blue" alt="Platform: Windows | macOS">
+  <img src="https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-lightgrey" alt="License: CC BY-NC-SA 4.0">
+  <img src="https://img.shields.io/badge/version-0.2.0-green" alt="Version 0.2.0">
+</p>
+
+<p align="center">
+  <img src="docs/screenshot-recording-640x620.png" width="32%" alt="Recording with interview timer and audio meters">
+  <img src="docs/screenshot-warning-640x620.png" width="32%" alt="Recording with a yellow warning">
+  <img src="docs/screenshot-alarm-640x620.png" width="32%" alt="Red alarm: unexpected recording stop">
+</p>
+
+---
+
+## Why
+
+The ATEM Mini Pro ISO stopped recording in the middle of an interview. Nobody noticed, and the whole session
+had to be recorded again. The ATEM's own indicators are easy to miss when you are focused on your guest.
+This app sits in a corner of your monitor and makes a stopped recording **impossible to miss**.
+
+## Features
+
+- 🟢 **Big recording status** with recording time: *green* recording · *yellow* recording with a warning · *grey* not recording
+- 🔴 **Alarm when recording stops**: flashing red screen, sounds in your headphones, window jumps to the front.
+  Stops with an ATEM error (disk full, disk error, disk removed, dropping frames…) or a lost connection are marked
+  **UNEXPECTED** and the siren repeats until you acknowledge it
+- 🟡 **Early warnings**: low disk space, no / unformatted disk, ATEM error flags, no audio on MASTER, not connected
+- ⏱️ **Interview timer**: measures the real interview length, separate from the recording (which usually starts earlier and ends later)
+- ⚑ **Marks**: note moments to cut later, with the position in the recording file and the **ATEM timecode**
+- 📝 **Session files**: one text file per recording with all events and timecodes, ready for editing in DaVinci Resolve
+- 🖱️ **Cursor check**: warns when your mouse cursor is outside the app during an interview (so it isn't visible over your cameras or shared screen in the recording)
+- 🎚️ **Audio meters** for all active ATEM audio channels and MASTER
+- 🧾 **Event log**: the ATEM has no accessible crash log, so the app writes its own, which helps you find out *why* a recording stopped
+- 🪶 **Lightweight**: about 12 % of one CPU core with meters on, under 1 % with meters off
+
+## Requirements
+
+- Blackmagic **ATEM Mini Pro**, **ATEM Mini Pro ISO** (tested) or another ATEM model with recording to USB disk
+- The ATEM connected to your network by **Ethernet** (same network as the computer)
+- **Windows 10/11** (64-bit) or **macOS**
+
+## Installation
+
+### Windows
+1. Download `ATEM-Recording-Alert-<version>-portable.exe` from the [**Releases**](../../releases) page.
+2. Run it. No installation needed; it's a single portable file.
+3. The app is not code-signed, so Windows SmartScreen may warn you the first time: click **More info → Run anyway**.
+4. If Windows Firewall asks, allow access on **private networks** (the ATEM uses UDP port 9910).
+
+### macOS
+Build and run from source (see [Development](#development)).
+
+## User manual
+
+### First start
+1. Find your ATEM's IP address (ATEM Setup → *Configure* → *Network*).
+2. Click **⚙** (bottom right) and enter the IP address. It is saved for next time.
+3. The bottom line shows **● ATEM Mini Pro ISO @ 192.168.x.x** in green when connected.
+4. Click **⚙ → Test alerts ▾** to hear all sounds once and set the volume.
+
+Place the window wherever you like, for example on your monitoring screen. It can be made very small; everything scales.
+
+<img src="docs/screenshot-recording-380x300.png" width="260" alt="The app in a small window">
+The position is remembered **separately for each monitor setup** (e.g. 1 and 2 monitors) and restored automatically
+when a monitor appears or disappears.
+
+### The status panel
+
+| Display | Meaning |
+|---|---|
+| grey **NOT RECORDING** | ATEM is connected and ready |
+| green **● RECORDING 00:12:34** | recording, everything OK |
+| yellow **● RECORDING** + yellow bar | recording, but check the warning |
+| flashing red **RECORDING STOPPED** | recording stopped; click **OK – I have seen it** |
+| flashing red **UNEXPECTED RECORDING STOP!** | the ATEM reported an error when it stopped; the reason is shown |
+| flashing red **LOST CONNECTION TO ATEM** | the network connection dropped while recording |
+| dark yellow **NO CONNECTION** | the app can't reach the ATEM; it keeps retrying |
+
+> **Why does every stop raise an alarm?** The ATEM doesn't report *who* stopped the recording. So every stop
+> is announced, and you simply click **OK** after you stopped it yourself. If the ATEM reports an error, the stop is
+> marked **UNEXPECTED**.
+
+### Sounds
+
 | Event | Sound |
 |---|---|
 | Recording started | 3 short high beeps |
-| Recording stopped (any stop) | 3 long low beeps |
-| Stopped **with an error** (disk error/full/removed…) | 3 long beeps + siren, repeating every 6 s until *OK* |
-| Lost connection to ATEM while recording | siren, repeating until *OK* |
-| Connection back and still recording | rising 3 beeps |
+| Recording stopped | 3 long low beeps |
+| Unexpected stop (ATEM error) | 3 long beeps + siren, repeating every 6 s until **OK** |
+| Lost connection while recording | siren, repeating until **OK** |
+| Connection back, still recording | 3 rising beeps |
 | New yellow warning | 2 short beeps |
+| Interview start / end / mark | 2 rising tones / 2 falling tones / short blip |
+| Cursor outside window (optional) | one soft low tone |
 
-Use **Test alerts ▾** to hear and see every alert without touching the ATEM.
+Sounds play on the computer's default audio output.
 
-## "Unexpected" vs. normal stop
-The ATEM does not say *who* pressed stop. So **every stop raises a red alert**. If the ATEM reports an error
-at the moment of stopping (disk error, full, removed, unformatted, dropping frames), or the connection
-dropped, it is highlighted as **UNEXPECTED** and the siren keeps going until acknowledged.
+### Interview timer
+The recording usually starts before the interview and ends after it. The blue **interview bar** measures the interview itself:
 
-## Event log (our own "crash log")
-The ATEM itself keeps no accessible crash log, so the app writes one: every connection change, every
-recording state change with the raw ATEM error code and disk status, and a heartbeat line every minute
-while recording. Click **Open logs**.
-Old files are deleted automatically (at start and once a day): daily logs after **90 days**, session files after
-**365 days** (`logRetentionDays` / `sessionRetentionDays` in `settings.json`; 0 = keep forever). Only files the
-app created are touched.
-- Windows: `%APPDATA%\ATEM Recording Alert\logs\`
-- macOS: `~/Library/Application Support/ATEM Recording Alert/logs/`
+1. Start recording on the ATEM. **▶ START INTERVIEW** becomes active (it is greyed out while not recording).
+2. Click **▶ START INTERVIEW** when the interview really begins.
+3. Click **⚑ Mark** to note a moment, e.g. something you may want to cut later.
+4. Click **■ End** when the interview is over. The bar shows the final **INTERVIEW LENGTH**.
 
-## Running
-### Windows (final setup)
-Copy `dist/ATEM-Recording-Alert-<version>-portable.exe` to the PC and run it. No installation needed.
-The app isn't code-signed, so Windows SmartScreen will warn the first time: click *More info → Run anyway*.
-Windows Firewall may ask about network access: allow it on **private** networks (the ATEM uses UDP port 9910).
+- **↺ Resume** undoes an accidental *End* (the interview continues).
+- Interview time only counts **while recording**. If the recording stops, a running interview ends with it.
+- After an interrupted recording, start recording again and click the small **↺ Resume previous** to continue the
+  interview timer where it stopped (the pause is not counted). It is offered for 60 minutes.
+- The timer survives an app restart.
 
-### macOS (development)
+### Cursor check
+During an interview, a flashing orange banner **🖱 CURSOR OUTSIDE THIS WINDOW** appears if the mouse has been outside
+the app for more than 3 seconds, so it can't end up visible over your cameras or shared screen in the recording.
+Switch it off, or add a soft beep, in **⚙** (*Cursor check*, *Cursor beep*).
+
+### Session files: timecodes for editing
+For every recording the app writes a small text file (**⚙ → Open session files**):
+
+```
+10:24:12   00:00:00   10:23:52:02  RECORDING STARTED
+10:24:27   00:00:14   10:24:06:58  INTERVIEW START
+10:24:36   00:00:23   10:24:16:27  MARK 1   (interview time 00:00:09)
+10:24:43   00:00:30   10:24:22:50  INTERVIEW END   length 00:00:15, 1 mark(s)
+10:24:48   00:00:36   10:24:28:15  RECORDING STOPPED (no error reported by ATEM, recorded 00:00:36)
+```
+
+Columns: computer time · position in the recording file · **ATEM timecode** (the same timecode the ATEM writes into
+the recorded files, so it matches the timeline in DaVinci Resolve) · event.
+A `~` before the position means it is approximate (the app was started while the ATEM was already recording).
+
+### Settings (⚙)
+
+| Setting | |
+|---|---|
+| **IP** | ATEM IP address |
+| **On top** | keep the window above other windows |
+| **Audio meters** | off = lowest CPU use (also disables the "no audio" warning) |
+| **Cursor check / Cursor beep** | see [Cursor check](#cursor-check) |
+| **🔊 volume** | volume of the alert sounds |
+| **Test alerts ▾** | play/show every alert without touching the ATEM |
+| **Open logs / Open session files** | open the folders |
+
+Advanced options are in `settings.json` (in the folder above `logs`):
+`lowDiskWarnMinutes` (30), `silenceWarnSeconds` (20), `silenceThresholdDb` (-50), `cursorGraceSeconds` (3),
+`logRetentionDays` (90), `sessionRetentionDays` (365; 0 = keep forever).
+
+### Logs and files
+| | Windows | macOS |
+|---|---|---|
+| Logs | `%APPDATA%\ATEM Recording Alert\logs\` | `~/Library/Application Support/ATEM Recording Alert/logs/` |
+| Session files | `…\logs\sessions\` | `…/logs/sessions/` |
+| Settings | `%APPDATA%\ATEM Recording Alert\settings.json` | `~/Library/Application Support/ATEM Recording Alert/settings.json` |
+
+The daily log records every connection change, every recording state change with the raw ATEM error code and disk
+status, alarms, and a heartbeat every minute while recording. Old files are deleted automatically: logs after
+90 days, session files after 1 year. Only files the app created are touched.
+
+## Troubleshooting
+
+| Problem | What to check |
+|---|---|
+| **NO CONNECTION** | ATEM connected by Ethernet? Correct IP in ⚙? Computer on the same network? Firewall allows the app on private networks? |
+| No sound | Volume slider in ⚙, the computer's output device and volume. Try **Test alerts ▾** |
+| Window not visible | Start the app again: it brings the existing window to the front |
+| A recording stopped and you want to know why | **⚙ → Open logs**, look at the lines around the stop (`REC`, `ALARM`, `WARN`, `CONN`) |
+| "No audio on MASTER" warning | Nobody is speaking or the MASTER fader is down. Raise `silenceWarnSeconds` or switch meters off if not needed |
+
+## Reliability and security
+
+- **Close protection**: while recording or during an interview, closing the app asks *Keep watching / Quit anyway*
+- **Crash recovery**: the display reloads itself if it crashes or hangs; errors are logged
+- **Single instance**: starting the app again just brings the existing window to the front
+- **Clock corrections** (time sync) don't make the timers jump
+- **No internet access**: the app only talks to the ATEM on your local network (UDP 9910). No telemetry
+- **Hardened window**: sandboxed, no navigation, no popups, no permissions
+- **Dependencies pinned** to exact versions with checksums; package install scripts are disabled
+
+## Development
+
+Requires [Node.js](https://nodejs.org/) (LTS).
+
 ```bash
-npm ci             # install the exact pinned versions from package-lock.json
+npm ci             # install the exact pinned dependency versions
 npm start          # run the app
-npm run probe      # print raw ATEM recording state + audio levels in the terminal
+npm run probe      # print the raw ATEM recording state and audio levels in the terminal
 npm run dist:win   # build the Windows portable .exe into dist/
 ```
 
-## Dependency safety
-- All versions are **pinned exactly** in `package.json`, and `package-lock.json` holds a SHA-512 checksum
-  for every package. `npm ci` installs exactly those files and fails if anything differs.
-- `.npmrc` sets `ignore-scripts=true` (packages can't run code while being installed) and `save-exact=true`.
-  Electron downloads its runtime on the first `npm start` instead.
-- Updating is a deliberate step: `npm install <pkg>@<version>`, then `npm audit --omit=dev`.
+### Project structure
+| Path | |
+|---|---|
+| `main.js` | ATEM connection, alert logic, interview timer, logging, window handling |
+| `preload.js` | safe bridge between the window and the main process |
+| `renderer/` | user interface (`index.html`, `app.js`, `style.css`) and generated sounds (`sounds.js`) |
+| `tools/probe.js` | command-line diagnostic |
+| `tools/make-icon.js` | renders `build/icon.svg` to `build/icon.png` |
+| `docs/` | screenshots |
 
-## CPU use
-Measured on an M4 Pro Mac: about **12 % of one CPU core with audio meters on**, about **0.7 % with meters off**
-(⚙ → *Audio meters*). Almost all of the cost is the ATEM's audio level stream (~420 messages/s) and drawing the
-meters. Switching the meters off also disables the "no audio on MASTER" warning. Cursor check runs once per second.
-
-## Reliability
-- **Close protection**: while recording or during an interview, closing the window asks "Keep watching / Quit anyway".
-- **Crash recovery**: if the display part crashes or hangs (10 s), it is reloaded automatically; errors are logged.
-- **Single copy**: starting the app again just brings the existing window to the front.
-- **Alarms bring the window up** (restored if minimized, moved on top, taskbar flashes) without taking keyboard focus.
-- **Window position per monitor setup**: remembered separately for e.g. 1 and 2 monitors; when a monitor
-  appears/disappears the window moves to the position saved for that setup. Off-screen positions are never used.
-- **Clock corrections** (time sync) are detected and the timers are corrected, so they don't jump.
-- Memory use is written to the log every 30 min.
-
-## Maintenance (every few months, and after an ATEM firmware update)
-Versions are pinned, so security fixes don't arrive automatically. Deliberately:
+### Maintenance
+Dependencies are pinned, so security fixes don't arrive automatically. Every few months:
 ```bash
-npm outdated                         # see what's new
-npm install electron@<version>       # update deliberately, one package at a time
-npm audit --omit=dev                 # check for known vulnerabilities
-npm start                            # test: start/stop a short recording, interview timer, alarms
+npm outdated                    # see what's new
+npm install electron@<version>  # update deliberately, one package at a time
+npm audit --omit=dev            # check for known vulnerabilities
+npm start                       # test: short recording, interview timer, alarms
 ```
-After an **ATEM firmware update**, always do a short test recording (start, stop) with the app running.
-The project is in **git**: `git log` shows history, `git diff` shows uncommitted changes.
+After an **ATEM firmware update**, always make a short test recording with the app running.
 
-## Settings
-IP address, *On top* and volume are in the footer. They are saved in `settings.json` next to the logs
-folder. That file also holds `lowDiskWarnMinutes`, `silenceWarnSeconds` and `silenceThresholdDb` if you want to tune the warnings.
+## Credits
 
-## Files
-- `main.js`: ATEM connection (library [`atem-connection`](https://github.com/Sofie-Automation/sofie-atem-connection)), alert logic, logging
-- `preload.js`: bridge to the UI
-- `renderer/`: UI (`app.js`), sounds (`sounds.js`, generated, no audio files), styles
-- `tools/probe.js`: command-line diagnostic
-- `build/icon.svg` / `icon.png`: app icon (`npx electron tools/make-icon.js` re-renders the PNG)
+- [atem-connection](https://github.com/Sofie-Automation/sofie-atem-connection) (MIT), the library that talks to the ATEM, from the Sofie project
+- [Electron](https://www.electronjs.org/) (MIT) and [electron-builder](https://www.electron.build/) (MIT)
+
+## License
+
+© FEDEVEL
+
+This project is licensed under the
+[**Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International**](https://creativecommons.org/licenses/by-nc-sa/4.0/) license (CC BY-NC-SA 4.0).
+You may use, share and adapt it **for non-commercial purposes**, as long as you **give credit to FEDEVEL with a link
+to this project** and share your changes **under the same license**. See [LICENSE](LICENSE).
+
+Third-party libraries keep their own (MIT) licenses.
+
+## Disclaimer
+
+ATEM and Blackmagic Design are trademarks of Blackmagic Design Pty. Ltd. This project is not affiliated with,
+endorsed by or supported by Blackmagic Design.
+The software is provided "as is", without warranty of any kind. It helps you notice problems, but it cannot
+guarantee that a recording succeeds. Always check your recordings.

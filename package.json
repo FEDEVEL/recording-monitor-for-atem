@@ -10,8 +10,8 @@
     "dist:mac": "electron-builder --mac dir"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "FEDEVEL",
+  "license": "CC-BY-NC-SA-4.0",
   "type": "commonjs",
   "dependencies": {
     "atem-connection": "3.11.1"
@@ -29,7 +29,8 @@
       "preload.js",
       "renderer/**",
       "package.json",
-      "build/icon.png"
+      "build/icon.png",
+      "LICENSE"
     ],
     "win": {
       "target": [
