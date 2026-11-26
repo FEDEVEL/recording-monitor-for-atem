@@ -2,7 +2,8 @@
 
 ## Unreleased
 ### Changed
-- Yellow warnings no longer beep by default (new **Warning beeps** option in ⚙); red alarms still do
+- Sounds that can happen while someone is talking are **off by default** (warnings, marks, connection lost/restored, cursor) and can be enabled in ⚙ → *Extra sounds*; they may end up in the recording
+- *Test alerts* has a *Lost connection alarm*
 - "On top" renamed to **Always on top**
 
 ## 0.2.0 (2026-11-26)

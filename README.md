@@ -110,20 +110,22 @@ Red alarms and *not connected* can't be ignored.
 > marked **UNEXPECTED**.
 
 ### Sounds
+Whatever plays in your headphones may end up in the recording. So the app only makes sounds at moments
+**you** choose, or when the recording has **already stopped**. Everything that could happen while someone is
+talking is **silent by default** and only shown on screen.
 
-| Event | Sound |
-|---|---|
-| Recording started | 3 short high beeps |
-| Recording stopped | 3 long low beeps |
-| Unexpected stop (ATEM error) | 3 long beeps + siren, repeating every 6 s until **OK** |
-| Lost connection while recording | siren, repeating until **OK** |
-| Connection back, still recording | 3 rising beeps |
-| New yellow warning | 2 short beeps (only if **Warning beeps** is on in ⚙; off by default) |
-| Interview start / end / mark | 2 rising tones / 2 falling tones / short blip |
-| Cursor outside window (optional) | one soft low tone |
+| Event | Sound | Default |
+|---|---|---|
+| Recording started | 3 short high beeps | on |
+| Interview start / end | 2 rising / 2 falling tones | on |
+| Recording stopped | 3 long low beeps | on |
+| Unexpected stop (ATEM error) | 3 long beeps + siren, repeating every 6 s until **OK** | on |
+| New yellow warning | 2 short beeps | **off** |
+| Mark | short blip | **off** |
+| Lost connection / connection back | siren (repeating) / 3 rising beeps | **off** (red screen, window comes to front) |
+| Cursor outside window | one soft low tone | **off** |
 
-Sounds play on the computer's default audio output. **Make sure that is your headphones**, not the HDMI output
-to the ATEM, otherwise the beeps can end up in the recording.
+The *off* sounds can be switched on in **⚙ → Extra sounds**. **Test alerts ▾** plays the sounds as currently set.
 
 ### Interview timer
 The recording usually starts before the interview and ends after it. The blue **interview bar** measures the interview itself:
@@ -143,7 +145,7 @@ The recording usually starts before the interview and ends after it. The blue **
 ### Cursor check
 During an interview, a flashing orange banner **🖱 CURSOR OUTSIDE THIS WINDOW** appears if the mouse has been outside
 the app for more than 3 seconds, so it can't end up visible over your cameras or shared screen in the recording.
-Switch it off, or add a soft beep, in **⚙** (*Cursor check*, *Cursor beep*).
+Switch it off in **⚙ → Cursor check**, or add a soft beep in **⚙ → Extra sounds**.
 
 ### Session files: timecodes for editing
 For every recording the app writes a small text file (**⚙ → Open session files**):
@@ -166,9 +168,9 @@ A `~` before the position means it is approximate (the app was started while the
 |---|---|
 | **IP** | ATEM IP address |
 | **Always on top** | keep the window above other windows |
-| **Warning beeps** | beep when a yellow warning appears (off by default; red alarms always make sound) |
+| **Extra sounds** | warnings, marks, connection lost/restored, cursor: all off by default (they may be recorded) |
 | **Audio meters** | off = lowest CPU use (also disables the "no audio" warning) |
-| **Cursor check / Cursor beep** | see [Cursor check](#cursor-check) |
+| **Cursor check** | see [Cursor check](#cursor-check) |
 | **🔊 volume** | volume of the alert sounds |
 | **Test alerts ▾** | play/show every alert without touching the ATEM |
 | **Open logs / Open session files** | open the folders |

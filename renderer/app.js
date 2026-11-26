@@ -119,17 +119,16 @@ function render() {
   if (document.activeElement !== $('ipInput')) setProp('ipInput', 'value', s.ip)
   setText('version', 'v' + s.version)
   setProp('onTop', 'checked', !!s.settings.alwaysOnTop)
-  setProp('warnBeep', 'checked', !!s.settings.warningBeeps)
   setProp('cursorCheck', 'checked', !!s.settings.cursorCheck)
-  setProp('cursorBeep', 'checked', !!s.settings.cursorBeep)
-  setProp('cursorBeep', 'disabled', !s.settings.cursorCheck)
+  for (const el of document.querySelectorAll('[data-sound]')) el.checked = !!s.settings[el.dataset.sound]
   setProp('meterToggle', 'checked', s.settings.audioMeters !== false)
   setHidden('meters', s.settings.audioMeters === false)
   if (document.activeElement !== $('volume')) setProp('volume', 'value', String(s.settings.volume))
   Sounds.setVolume(s.settings.volume)
 
   // repeat the alarm sound until acknowledged (only for unexpected stop / lost connection)
-  const repeating = s.alarm && (s.alarm.kind === 'unexpected' || s.alarm.kind === 'connlost')
+  // repeat the siren: unexpected stop always (recording already stopped); lost connection only if enabled
+  const repeating = s.alarm && (s.alarm.kind === 'unexpected' || (s.alarm.kind === 'connlost' && s.settings.connectionSounds))
   if (repeating && currentAlarmTime !== s.alarm.time) {
     currentAlarmTime = s.alarm.time
     clearInterval(alarmRepeatTimer)
@@ -185,12 +184,12 @@ api.on('event', (e) => {
     case 'rec-start': Sounds.start(); break
     case 'rec-stop': Sounds.stop(); break
     case 'rec-stop-unexpected': Sounds.stop(); setTimeout(Sounds.alarm, 2700); break
-    case 'conn-lost': Sounds.alarm(); break
-    case 'conn-restored': Sounds.restored(); break
+    case 'conn-lost': if (state?.settings.connectionSounds) Sounds.alarm(); break
+    case 'conn-restored': if (state?.settings.connectionSounds) Sounds.restored(); break
     case 'warning': Sounds.warning(); break
     case 'iv-start': Sounds.ivStart(); break
     case 'iv-end': Sounds.ivEnd(); break
-    case 'iv-mark': Sounds.mark(); break
+    case 'iv-mark': if (state?.settings.markBeep) Sounds.mark(); break
     case 'cursor': Sounds.cursor(); break
   }
 })
@@ -272,9 +271,8 @@ $('ackBtn').onclick = () => {
 $('ipInput').onchange = (e) => api.setIp(e.target.value)
 $('onTop').onchange = (e) => api.setAlwaysOnTop(e.target.checked)
 $('cursorCheck').onchange = (e) => api.setCursorOptions({ check: e.target.checked })
-$('warnBeep').onchange = (e) => api.setWarningBeeps(e.target.checked)
 $('meterToggle').onchange = (e) => api.setAudioMeters(e.target.checked)
-$('cursorBeep').onchange = (e) => api.setCursorOptions({ beep: e.target.checked })
+for (const el of document.querySelectorAll('[data-sound]')) el.onchange = () => api.setSoundOption(el.dataset.sound, el.checked)
 $('volume').oninput = (e) => {
   Sounds.setVolume(Number(e.target.value))
   api.setVolume(e.target.value)

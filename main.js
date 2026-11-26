@@ -30,7 +30,12 @@ const DEFAULT_SETTINGS = {
   silenceWarnSeconds: 20,
   silenceThresholdDb: -50,
   volume: 0.6,
-  warningBeeps: false, // yellow warnings are silent by default (only red alarms make sound)
+  // Sounds that can happen at any moment are OFF by default: whatever plays in the headphones may end up
+  // in the recording. Only sounds at moments the user chooses (recording/interview start/end) or when the
+  // recording has already stopped are always on.
+  warningBeeps: false, // new yellow warning
+  markBeep: false, // ⚑ Mark pressed
+  connectionSounds: false, // connection lost (siren) / restored
   cursorCheck: true, // warn when the mouse leaves this window during an interview
   cursorBeep: false, // ...and beep
   cursorGraceSeconds: 3,
@@ -837,10 +842,12 @@ ipcMain.on('setCursorOptions', (_e, o) => {
   checkCursor()
   publish()
 })
-ipcMain.on('setWarningBeeps', (_e, on) => {
-  settings.warningBeeps = !!on
+// optional sounds (see settings): only these keys can be changed
+ipcMain.on('setSoundOption', (_e, key, on) => {
+  if (!['warningBeeps', 'markBeep', 'connectionSounds', 'cursorBeep'].includes(key)) return
+  settings[key] = !!on
   saveSettings()
-  log('APP', 'Warning beeps ' + (on ? 'on' : 'off'))
+  log('APP', `Sound option ${key} ${on ? 'on' : 'off'}`)
   publish()
 })
 ipcMain.on('setAudioMeters', async (_e, on) => {
@@ -981,6 +988,9 @@ ipcMain.on('simulate', (_e, what) => {
   } else if (what === 'unexpected') {
     st.alarm = { level: 'red', kind: 'unexpected', title: 'UNEXPECTED RECORDING STOP!', detail: '(TEST) Disk error (disk disconnected or failed?)', time: Date.now() }
     fireEvent('rec-stop-unexpected')
+  } else if (what === 'connlost') {
+    st.alarm = { level: 'red', kind: 'connlost', title: 'LOST CONNECTION TO ATEM', detail: '(TEST) Was recording when connection dropped - check the ATEM', time: Date.now() }
+    fireEvent('conn-lost')
   } else if (what === 'warning') {
     fireEvent('warning')
   }

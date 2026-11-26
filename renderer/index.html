@@ -58,11 +58,18 @@
         <div id="controls">
           <label title="ATEM IP address">IP <input id="ipInput" size="13" /></label>
           <label title="Keep this window above all other windows"><input type="checkbox" id="onTop" /> Always on top</label>
-          <label title="Beep when a yellow warning appears (red alarms always make sound)"><input type="checkbox" id="warnBeep" /> Warning beeps</label>
           <label title="Audio meters. Off = lowest CPU use (also disables the 'no audio' warning)"><input type="checkbox" id="meterToggle" /> Audio meters</label>
           <label title="During an interview, warn when the mouse is not over this window"><input type="checkbox" id="cursorCheck" /> Cursor check</label>
-          <label title="Also beep when the cursor warning appears"><input type="checkbox" id="cursorBeep" /> Cursor beep</label>
           <label title="Alert volume">🔊 <input type="range" id="volume" min="0" max="1" step="0.05" /></label>
+        </div>
+        <div id="soundOptions" title="These sounds can happen at any moment, also while someone is talking - and may end up in the recording. Off by default.">
+          <span>Extra sounds (may be recorded):</span>
+          <label><input type="checkbox" data-sound="warningBeeps" /> Warnings</label>
+          <label><input type="checkbox" data-sound="markBeep" /> Marks</label>
+          <label><input type="checkbox" data-sound="connectionSounds" /> Connection lost/restored</label>
+          <label><input type="checkbox" data-sound="cursorBeep" /> Cursor outside window</label>
+        </div>
+        <div id="buttonsRow">
           <button id="testBtn">Test alerts ▾</button>
           <button id="logsBtn">Open logs</button>
           <button id="sessionsBtn">Open session files</button>
@@ -71,6 +78,7 @@
           <button data-sim="start">Start beeps</button>
           <button data-sim="stop">Stop alert</button>
           <button data-sim="unexpected">Unexpected stop alarm</button>
+          <button data-sim="connlost">Lost connection alarm</button>
           <button data-sim="warning">Warning beep</button>
         </div>
         <div id="about">
