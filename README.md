@@ -132,7 +132,8 @@ The recording usually starts before the interview and ends after it. The blue **
 3. Click **⚑ Mark** to note a moment, e.g. something you may want to cut later.
 4. Click **■ End** when the interview is over. The bar shows the final **INTERVIEW LENGTH**.
 
-- **↺ Resume** undoes an accidental *End* (the interview continues).
+- **↺ Resume** continues the same interview timer from where you pressed *End*; the time in between is **not counted**
+  (so *End* + *Resume* also works as a pause, e.g. for a break).
 - Interview time only counts **while recording**. If the recording stops, a running interview ends with it.
 - After an interrupted recording, start recording again and click the small **↺ Resume previous** to continue the
   interview timer where it stopped (the pause is not counted). It is offered for 60 minutes.

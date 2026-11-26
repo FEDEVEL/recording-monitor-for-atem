@@ -150,7 +150,7 @@ function renderInterview(s) {
   // Start / New only while the ATEM is recording
   const canStart = s.connection === 'connected' && s.rec.state === 'recording'
   for (const id of ['ivStart', 'ivNew', 'ivResume', 'ivResumePrev']) setProp(id, 'disabled', !canStart)
-  setProp('ivResume', 'title', canStart ? 'Pressed End by mistake? Continue the same interview' : 'Start recording first')
+  setProp('ivResume', 'title', canStart ? 'Continue the same interview timer (the time since End is not counted)' : 'Start recording first')
   setText('ivStart', canStart ? '▶ START INTERVIEW' : '▶ START INTERVIEW (start recording first)')
   setProp('ivNew', 'title', canStart ? 'Start timing a new interview' : 'Start recording first')
   const prev = iv.state === 'none' && iv.previous

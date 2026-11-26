@@ -4,6 +4,9 @@
 ### Changed
 - Renamed from "ATEM Recording Alert" to **Recording Monitor for ATEM**; existing settings and logs are moved automatically
 
+### Changed
+- Interview **↺ Resume** continues from the value at *End*; the paused time is not counted (logged in the session file)
+
 ### Added
 - "✕ Ignore" for yellow warnings: temporary; they come back when worse (low disk: 15/10/5 min), after 10 min, or with the next recording
 - About line in ⚙ with version, license, GitHub link and a manual "Check for updates"

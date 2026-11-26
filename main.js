@@ -925,12 +925,17 @@ ipcMain.on('interview', (_e, action) => {
     sessionWrite(`MARK ${iv.marks}` + (iv.state === 'running' ? `   (interview time ${fmtDur((now - iv.startedAt) / 1000)})` : ''))
     fireEvent('iv-mark')
   } else if (action === 'resume' && iv.state === 'ended' && st.rec.state === 'recording') {
-    // undo an accidental End: continue the same interview
+    // continue the same interview from the value it had at End - the pause is not counted
+    const gap = now - iv.endedAt
+    iv.firstStartedAt = iv.firstStartedAt || iv.startedAt
+    iv.startedAt += gap // shift the start so the timer continues where it stopped
+    iv.pausedMs = (iv.pausedMs || 0) + gap
+    iv.resumedAt = now
     iv.state = 'running'
     iv.endedAt = null
     iv.autoEnded = false
-    log('INTERVIEW', 'Interview resumed')
-    sessionWrite('INTERVIEW RESUMED (End was undone)')
+    log('INTERVIEW', `Interview resumed, pause of ${fmtDur(gap / 1000)} not counted`)
+    sessionWrite(`INTERVIEW RESUMED at interview time ${fmtDur((now - iv.startedAt) / 1000)} (pause of ${fmtDur(gap / 1000)} not counted)`)
     fireEvent('iv-start')
   } else if (action === 'resumePrevious' && iv.state === 'none' && iv.previous && st.rec.state === 'recording') {
     // continue the timer from where the previous interview ended (the gap between recordings is not counted)
