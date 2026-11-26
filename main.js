@@ -408,7 +408,11 @@ function updateWarnings() {
   // apply "ignore": expired, worse or vanished warnings are no longer ignored
   const now = Date.now()
   const activeIds = new Set(w.map((x) => x.id))
-  for (const id of Object.keys(ignored)) if (!activeIds.has(id)) delete ignored[id]
+  for (const id of Object.keys(ignored))
+    if (!activeIds.has(id)) {
+      if (st.rec.state === 'recording') sessionWrite(`Ignored warning cleared (problem went away): ${ignored[id].text}`)
+      delete ignored[id]
+    }
   const shown = [], hidden = []
   for (const x of w) {
     const ig = ignored[x.id]
@@ -416,7 +420,9 @@ function updateWarnings() {
     else {
       if (ig) {
         delete ignored[x.id]
-        log('WARN', `Ignored warning is back (${now >= ig.until ? 'time is up' : 'it got worse'}): ${x.text}`)
+        const why = now >= ig.until ? 'time is up' : 'it got worse'
+        log('WARN', `Ignored warning is back (${why}): ${x.text}`)
+        if (st.rec.state === 'recording') sessionWrite(`Ignored warning is back (${why}): ${x.text}`)
       }
       shown.push(x)
     }
@@ -875,8 +881,9 @@ ipcMain.handle('checkUpdates', async () => {
 ipcMain.on('ignoreWarning', (_e, id) => {
   const w = st.warnings.find((x) => x.id === id)
   if (!w || id === 'conn') return // "not connected" can't be ignored
-  ignored[id] = { until: Date.now() + settings.warnIgnoreMinutes * 60000, level: w.level || 0 }
+  ignored[id] = { until: Date.now() + settings.warnIgnoreMinutes * 60000, level: w.level || 0, text: w.text.replace(/ for \d+ s$/, '') }
   log('WARN', `Warning ignored for up to ${settings.warnIgnoreMinutes} min: ${w.text}`)
+  if (st.rec.state === 'recording') sessionWrite(`Warning ignored (for up to ${settings.warnIgnoreMinutes} min): ${w.text}`)
   updateWarnings()
   publish()
 })
@@ -992,8 +999,10 @@ function setupDemo(demo) {
   ]
   const lv = (l, r) => ({ l, r, lp: Math.max(l, r) + 4, rp: Math.max(l, r) + 3 })
   const levels = { '2:-65280': lv(-24, -26), '3:-65280': lv(-36, -38), '1302:-65280': lv(-12, -13), master: lv(-14, -15) }
+  // ATEM_ALERT_DEMO_SILENT=1: no audio (to test the "no audio" warning)
+  if (process.env.ATEM_ALERT_DEMO_SILENT) for (const k of Object.keys(levels)) levels[k] = { l: -100, r: -100, lp: -100, rp: -100 }
   setInterval(() => {
-    lastLoudAudioAt = Date.now()
+    if (!process.env.ATEM_ALERT_DEMO_SILENT) lastLoudAudioAt = Date.now()
     send('levels', levels)
   }, 100)
   send('audioChannels', audioChannels)

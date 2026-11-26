@@ -99,11 +99,11 @@ function render() {
       }
       wEl.appendChild(d)
     }
-    if (ign.length) {
+    // one small grey line per ignored warning, each with its own return time
+    for (const w of ign) {
       const d = document.createElement('div')
       d.className = 'ignoredNote'
-      d.textContent = `${ign.length} warning${ign.length > 1 ? 's' : ''} ignored: ` + ign.map((w) => w.text.replace(/ for \d+ s$/, '')).join(' · ') +
-        ` (back by ${clock(Math.min(...ign.map((w) => w.until))).slice(0, 5)} or if it gets worse)`
+      d.textContent = `ignored: ${w.text.replace(/ for \d+ s$/, '')} · back by ${clock(w.until).slice(0, 5)} or if it gets worse`
       wEl.appendChild(d)
     }
   }

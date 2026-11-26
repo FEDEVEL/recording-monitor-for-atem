@@ -95,7 +95,8 @@ when a monitor appears or disappears.
 
 ### Ignoring a yellow warning
 If you already know about a warning (for example *no audio* because no microphone is connected), click
-**✕ Ignore** on it: the status turns green again and a small grey line shows what is being ignored.
+**✕ Ignore** on it: the status turns green again and a small grey line per ignored warning shows what is being
+ignored and when it comes back. Ignoring and returning warnings are also written to the session file.
 Ignoring is always **temporary**. The warning comes back:
 - when it **gets worse** (low disk space warns again below 15, 10 and 5 minutes left),
 - after **10 minutes** at the latest (`warnIgnoreMinutes` in `settings.json`),
