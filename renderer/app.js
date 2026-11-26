@@ -261,6 +261,30 @@ $('volume').oninput = (e) => {
 }
 $('logsBtn').onclick = () => api.openLogs()
 $('sessionsBtn').onclick = () => api.openSessions()
+$('githubLink').onclick = (e) => {
+  e.preventDefault()
+  api.openProjectPage('home')
+}
+$('updateBtn').onclick = async () => {
+  const r = $('updateResult')
+  r.className = ''
+  r.textContent = 'Checking…'
+  const res = await api.checkUpdates()
+  if (res.status === 'newer') {
+    r.className = 'newer'
+    r.innerHTML = ''
+    const a = document.createElement('a')
+    a.href = '#'
+    a.textContent = `Version ${res.latest} is available – download ↗`
+    a.onclick = (e) => {
+      e.preventDefault()
+      api.openProjectPage('releases')
+    }
+    r.appendChild(a)
+  } else if (res.status === 'latest') r.textContent = `✓ You have the latest version (${res.current})`
+  else if (res.status === 'none') r.textContent = 'No releases published yet'
+  else r.textContent = 'Could not check: ' + res.message
+}
 $('ivStart').onclick = () => api.interview('start')
 $('ivNew').onclick = () => api.interview('start')
 $('ivEnd').onclick = () => api.interview('end')

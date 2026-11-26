@@ -108,7 +108,11 @@ footer { flex: 0 0 auto; background: var(--panel); padding: 3px 8px; font-size: 
 #controls input[type=range] { width: 80px; vertical-align: middle; }
 button { background: #333; color: var(--text); border: 1px solid #555; border-radius: 4px; padding: 3px 8px; cursor: pointer; font-size: 12px; }
 button:hover { background: #444; }
-#version { margin-left: auto; color: #666; }
+#about { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 6px; padding-top: 5px; border-top: 1px solid #333; }
+#about b { color: var(--text); font-weight: 600; }
+#about a { color: #6aa5ff; text-decoration: none; }
+#about a:hover { text-decoration: underline; }
+#updateResult.newer a { color: var(--m-yellow); font-weight: 700; }
 #lastLog { margin-top: 4px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* short meter strip: fewer scale numbers so they don't overlap */

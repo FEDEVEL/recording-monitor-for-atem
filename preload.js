@@ -16,4 +16,6 @@ contextBridge.exposeInMainWorld('atemAlert', {
   openSessions: () => ipcRenderer.send('openSessions'),
   setCursorOptions: (o) => ipcRenderer.send('setCursorOptions', o),
   setAudioMeters: (on) => ipcRenderer.send('setAudioMeters', on),
+  openProjectPage: (which) => ipcRenderer.send('openProjectPage', which),
+  checkUpdates: () => ipcRenderer.invoke('checkUpdates'),
 })

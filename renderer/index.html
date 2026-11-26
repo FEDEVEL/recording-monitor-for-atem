@@ -65,13 +65,18 @@
           <button id="testBtn">Test alerts ▾</button>
           <button id="logsBtn">Open logs</button>
           <button id="sessionsBtn">Open session files</button>
-          <span id="version"></span>
         </div>
         <div id="testMenu" hidden>
           <button data-sim="start">Start beeps</button>
           <button data-sim="stop">Stop alert</button>
           <button data-sim="unexpected">Unexpected stop alarm</button>
           <button data-sim="warning">Warning beep</button>
+        </div>
+        <div id="about">
+          <span><b>Recording Monitor for ATEM</b> <span id="version"></span> · © FEDEVEL · CC BY-NC-SA 4.0</span>
+          <a href="#" id="githubLink" title="github.com/FEDEVEL/recording-monitor-for-atem">GitHub ↗</a>
+          <button id="updateBtn">Check for updates</button>
+          <span id="updateResult"></span>
         </div>
         <div id="lastLog"></div>
         </div>

@@ -51,6 +51,11 @@ This app sits in a corner of your monitor and makes a stopped recording **imposs
 - The ATEM connected to your network by **Ethernet** (same network as the computer)
 - **Windows 10/11** (64-bit) or **macOS**
 
+## Updating
+Open **⚙** and click **Check for updates**. If a newer version exists, click the link to open the
+[Releases](../../releases) page, download the new `.exe` and replace the old one. Settings, logs and session files
+are kept, because they are stored separately from the program.
+
 ## Installation
 
 ### Windows
@@ -152,6 +157,7 @@ A `~` before the position means it is approximate (the app was started while the
 | **🔊 volume** | volume of the alert sounds |
 | **Test alerts ▾** | play/show every alert without touching the ATEM |
 | **Open logs / Open session files** | open the folders |
+| **About line** | version, license, **GitHub ↗** link and **Check for updates** (asks GitHub for the latest release, only when you click it) |
 
 Advanced options are in `settings.json` (in the folder above `logs`):
 `lowDiskWarnMinutes` (30), `silenceWarnSeconds` (20), `silenceThresholdDb` (-50), `cursorGraceSeconds` (3),
@@ -184,7 +190,8 @@ status, alarms, and a heartbeat every minute while recording. Old files are dele
 - **Crash recovery**: the display reloads itself if it crashes or hangs; errors are logged
 - **Single instance**: starting the app again just brings the existing window to the front
 - **Clock corrections** (time sync) don't make the timers jump
-- **No internet access**: the app only talks to the ATEM on your local network (UDP 9910). No telemetry
+- **No internet access**: the app only talks to the ATEM on your local network (UDP 9910). No telemetry.
+  The only exception is **Check for updates**, which contacts GitHub when you click it
 - **Hardened window**: sandboxed, no navigation, no popups, no permissions
 - **Dependencies pinned** to exact versions with checksums; package install scripts are disabled
 

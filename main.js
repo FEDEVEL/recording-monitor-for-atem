@@ -1,6 +1,6 @@
 // Recording Monitor for ATEM - main process
 // Connects to the ATEM, watches recording status, decides alerts, writes an event log.
-const { app, BrowserWindow, ipcMain, shell, powerSaveBlocker, screen, dialog, session } = require('electron')
+const { app, BrowserWindow, ipcMain, shell, powerSaveBlocker, screen, dialog, session, net } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const { Atem } = require('atem-connection')
@@ -17,6 +17,8 @@ const REC_ERRORS = [
   [32768, 'Unknown', 'Unknown recording error'],
 ]
 const DISK_STATUS = { 1: 'idle', 2: 'unformatted', 4: 'active', 8: 'recording', 32: 'removed' }
+const PROJECT_URL = 'https://github.com/FEDEVEL/recording-monitor-for-atem'
+const LATEST_RELEASE_API = 'https://api.github.com/repos/FEDEVEL/recording-monitor-for-atem/releases/latest'
 const AUDIO_NAMES = { 1: 'HDMI 1', 2: 'HDMI 2', 3: 'HDMI 3', 4: 'HDMI 4', 1301: 'Mic 1', 1302: 'Mic 2' }
 
 // ---------- Settings ----------
@@ -810,6 +812,33 @@ ipcMain.on('setAudioMeters', async (_e, on) => {
   }
   log('APP', 'Audio meters ' + (on ? 'on' : 'off'))
   publish()
+})
+// About: open the project page in the normal browser (only these fixed addresses)
+ipcMain.on('openProjectPage', (_e, which) => {
+  shell.openExternal(which === 'releases' ? PROJECT_URL + '/releases' : PROJECT_URL)
+})
+// Update check: only when the user clicks the button; asks GitHub for the latest release
+const versionParts = (v) => String(v).replace(/^v/i, '').split(/[.-]/).map((x) => parseInt(x, 10) || 0)
+function isNewer(a, b) {
+  const x = versionParts(a), y = versionParts(b)
+  for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0)
+  return false
+}
+ipcMain.handle('checkUpdates', async () => {
+  const current = app.getVersion()
+  try {
+    const res = await net.fetch(LATEST_RELEASE_API, {
+      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'recording-monitor-for-atem' },
+    })
+    if (res.status === 404) return { status: 'none', current }
+    if (!res.ok) return { status: 'error', current, message: 'GitHub answered ' + res.status }
+    const rel = await res.json()
+    const latest = String(rel.tag_name || '').replace(/^v/i, '')
+    log('APP', `Update check: running ${current}, latest release ${latest}`)
+    return { status: isNewer(latest, current) ? 'newer' : 'latest', current, latest }
+  } catch (e) {
+    return { status: 'error', current, message: 'No connection to GitHub' }
+  }
 })
 ipcMain.on('openLogs', () => {
   fs.mkdirSync(logDir(), { recursive: true })
