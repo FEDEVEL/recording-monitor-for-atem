@@ -430,6 +430,8 @@ function connectAtem() {
     if (wasConnLostWhileRecording && st.rec.state === 'recording') {
       // still recording after reconnect: downgrade the alarm
       st.alarm = null
+      log('CONN', 'Connection restored - ATEM is still recording')
+      sessionWrite('Connection to ATEM restored - still recording')
       fireEvent('conn-restored')
       publish()
     }
@@ -448,6 +450,7 @@ function connectAtem() {
         time: Date.now(),
       }
       sessionWrite('LOST CONNECTION TO ATEM while recording', true)
+      log('ALARM', 'Lost connection to ATEM while recording')
       fireEvent('conn-lost')
     }
     st.rec.state = 'unknown'
@@ -599,6 +602,18 @@ function isOnScreen(b) {
     })
   )
 }
+// true if the window rectangle is visible on the displays described by a layout key
+function fitsLayout(b, key) {
+  if (!b || !key) return false
+  return key.split('|').some((r) => {
+    const m = r.match(/^(-?\d+),(-?\d+),(\d+)x(\d+)$/)
+    if (!m) return false
+    const [x, y, w, h] = m.slice(1).map(Number)
+    const iw = Math.min(b.x + b.width, x + w) - Math.max(b.x, x)
+    const ih = Math.min(b.y + b.height, y + h) - Math.max(b.y, y)
+    return iw >= 120 && ih >= 80
+  })
+}
 function savedBounds() {
   const b = (settings.boundsByLayout || {})[layoutKey()]
   if (isOnScreen(b)) return b
@@ -606,9 +621,17 @@ function savedBounds() {
   return null
 }
 let suppressBoundsSaveUntil = 0
+let rememberTimer = null
+// Save 1 s after the user stops moving/resizing - and only if the position really belongs to the
+// current monitor setup (during monitor changes the OS reports positions from the old setup)
 function rememberBounds() {
+  clearTimeout(rememberTimer)
+  rememberTimer = setTimeout(saveBoundsNow, 1000)
+}
+function saveBoundsNow() {
   if (!win || win.isDestroyed() || win.isMinimized() || Date.now() < suppressBoundsSaveUntil) return
   const b = win.getBounds()
+  if (!fitsLayout(b, layoutKey()) || !isOnScreen(b)) return
   settings.boundsByLayout = settings.boundsByLayout || {}
   delete settings.boundsByLayout[layoutKey()] // re-insert so the most recent layouts are kept
   settings.boundsByLayout[layoutKey()] = b
@@ -624,7 +647,8 @@ function onDisplaysChanged() {
   if (key === lastLayout) return
   lastLayout = key
   // the OS moves the window itself when a monitor disappears - don't save that as "my position"
-  suppressBoundsSaveUntil = Date.now() + 3000
+  suppressBoundsSaveUntil = Date.now() + 5000
+  clearTimeout(rememberTimer)
   setTimeout(() => {
     if (!win || win.isDestroyed()) return
     const b = (settings.boundsByLayout || {})[layoutKey()]
@@ -639,7 +663,7 @@ function onDisplaysChanged() {
     } else {
       log('APP', `Monitor setup changed (${screen.getAllDisplays().length} display(s)) - no saved position for this setup`)
     }
-    suppressBoundsSaveUntil = Date.now() + 1000
+    suppressBoundsSaveUntil = Date.now() + 2000
   }, 1000)
 }
 
@@ -725,7 +749,10 @@ function createWindow() {
       message: st.rec.state === 'recording' ? 'The ATEM is recording!' : 'An interview is running!',
       detail: 'If you quit now, you will NOT be alerted if the recording stops.',
     })
-    if (r === 0) e.preventDefault()
+    if (r === 0) {
+      e.preventDefault()
+      log('APP', 'Close cancelled ("Keep watching") while ' + (st.rec.state === 'recording' ? 'recording' : 'interview running'))
+    }
     else {
       quitConfirmed = true
       log('APP', 'Quit confirmed while ' + (st.rec.state === 'recording' ? 'recording' : 'interview running'))
@@ -893,6 +920,8 @@ app.on('second-instance', () => {
 if (isFirstInstance) app.whenReady().then(() => {
   loadSettings()
   if (settings.interview && settings.interview.state) st.interview = settings.interview
+  // drop saved window positions that don't fit their own monitor setup
+  for (const [k, b] of Object.entries(settings.boundsByLayout || {})) if (!fitsLayout(b, k)) delete settings.boundsByLayout[k]
   // stop the OS from suspending us (timers, network) during long sessions
   powerSaveBlocker.start('prevent-app-suspension')
   createWindow()
