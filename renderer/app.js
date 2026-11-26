@@ -77,7 +77,8 @@ function render() {
   setHidden('cursorWarn', !s.cursorOutside)
 
   // warnings (rebuilt only when the list changes)
-  const wKey = s.warnings.map((w) => w.text).join('\n')
+  const ign = s.ignoredWarnings || []
+  const wKey = s.warnings.map((w) => w.id + w.text).join('\n') + '|' + ign.map((w) => w.id + w.until).join(',')
   if (_cache.get('warnings') !== wKey) {
     _cache.set('warnings', wKey)
     const wEl = $('warnings')
@@ -85,7 +86,24 @@ function render() {
     for (const w of s.warnings) {
       const d = document.createElement('div')
       d.className = 'warning'
-      d.textContent = '⚠ ' + w.text
+      const t = document.createElement('span')
+      t.textContent = '⚠ ' + w.text
+      d.appendChild(t)
+      if (w.id !== 'conn') {
+        const b = document.createElement('button')
+        b.className = 'ignoreBtn'
+        b.textContent = '✕ Ignore'
+        b.title = 'Hide for now. It comes back if it gets worse, after a while, or with the next recording.'
+        b.onclick = () => api.ignoreWarning(w.id)
+        d.appendChild(b)
+      }
+      wEl.appendChild(d)
+    }
+    if (ign.length) {
+      const d = document.createElement('div')
+      d.className = 'ignoredNote'
+      d.textContent = `${ign.length} warning${ign.length > 1 ? 's' : ''} ignored: ` + ign.map((w) => w.text.replace(/ for \d+ s$/, '')).join(' · ') +
+        ` (back by ${clock(Math.min(...ign.map((w) => w.until))).slice(0, 5)} or if it gets worse)`
       wEl.appendChild(d)
     }
   }

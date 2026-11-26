@@ -34,6 +34,7 @@ const DEFAULT_SETTINGS = {
   cursorBeep: false, // ...and beep
   cursorGraceSeconds: 3,
   audioMeters: true, // off = ATEM stops sending audio levels (lowest CPU)
+  warnIgnoreMinutes: 10, // an ignored yellow warning comes back after this time at the latest
   logRetentionDays: 90, // daily logs (atem-alert-YYYY-MM-DD.log) older than this are deleted
   sessionRetentionDays: 365, // session files (logs/sessions/*.txt) older than this are deleted
 }
@@ -193,9 +194,17 @@ const st = {
   interview: { state: 'none', startedAt: null, endedAt: null, startRec: null, marks: 0, lastMark: null },
   alarm: null, // { level: 'red', kind, title, detail, time } - stays until acknowledged / recording restarts
   warnings: [], // [{ id, text }]
+  ignoredWarnings: [], // yellow warnings the user ignored for now: [{ id, text, until }]
   cursorOutside: false, // mouse has been outside this window for longer than the grace time (during interview)
 }
 let cursorOutsideSince = null
+// Ignored ("snoozed") warnings: id -> { until, level }. An ignored warning comes back when
+// - 10 minutes have passed, - it gets worse (level rises, e.g. less disk space),
+// - the problem went away (then a new occurrence warns again), - a recording starts or stops.
+let ignored = {}
+function clearIgnored() {
+  ignored = {}
+}
 let lastDurationValue = null
 let lastDurationChangeAt = null
 let lastLoudAudioAt = Date.now()
@@ -287,6 +296,7 @@ function onRecordingChanged(reason) {
       st.recStartExact = true
       startSession('recording ' + (st.rec.filename || ''))
       sessionWrite('RECORDING STARTED')
+      clearIgnored() // a new recording starts with all warnings visible
       // A finished interview from before is cleared, so the bar starts fresh.
       // A RUNNING interview is kept (e.g. recording restarted after an unexpected stop).
       if (st.interview.state === 'ended') {
@@ -319,6 +329,7 @@ function onRecordingChanged(reason) {
 }
 
 function handleStop(before) {
+  clearIgnored()
   const recordedFor = st.recStartedAt ? fmtDur((Date.now() - st.recStartedAt) / 1000) : '?'
   const iv = st.interview.state === 'running' ? ` · INTERVIEW WAS RUNNING (${fmtDur((Date.now() - st.interview.startedAt) / 1000)})` : ''
   const reasons = []
@@ -380,7 +391,11 @@ function updateWarnings() {
       if (d.status === 'removed') w.push({ id: 'rem' + d.id, text: `Disk "${d.name}" removed` })
     }
     if (mins != null && st.rec.disks.length && mins < settings.lowDiskWarnMinutes)
-      w.push({ id: 'lowdisk', text: `Low disk space: only ${Math.floor(mins)} min of recording left` })
+      w.push({
+        id: 'lowdisk',
+        text: `Low disk space: only ${Math.floor(mins)} min of recording left`,
+        level: mins < 5 ? 4 : mins < 10 ? 3 : mins < 15 ? 2 : 1, // worse level = warns again even if ignored
+      })
     if (recording) {
       for (const e of st.rec.errors) w.push({ id: 'err' + e.name, text: 'ATEM reports: ' + e.text })
       if (lastDurationChangeAt && Date.now() - lastDurationChangeAt > 10000 && lastDurationValue != null)
@@ -390,9 +405,26 @@ function updateWarnings() {
         w.push({ id: 'silence', text: `No audio on MASTER for ${Math.floor(silentFor)} s` })
     }
   }
+  // apply "ignore": expired, worse or vanished warnings are no longer ignored
+  const now = Date.now()
+  const activeIds = new Set(w.map((x) => x.id))
+  for (const id of Object.keys(ignored)) if (!activeIds.has(id)) delete ignored[id]
+  const shown = [], hidden = []
+  for (const x of w) {
+    const ig = ignored[x.id]
+    if (ig && now < ig.until && (x.level || 0) <= (ig.level || 0)) hidden.push({ id: x.id, text: x.text, until: ig.until })
+    else {
+      if (ig) {
+        delete ignored[x.id]
+        log('WARN', `Ignored warning is back (${now >= ig.until ? 'time is up' : 'it got worse'}): ${x.text}`)
+      }
+      shown.push(x)
+    }
+  }
+  st.ignoredWarnings = hidden
   const oldIds = new Set(st.warnings.map((x) => x.id))
-  const newOnes = w.filter((x) => !oldIds.has(x.id))
-  st.warnings = w
+  const newOnes = shown.filter((x) => !oldIds.has(x.id))
+  st.warnings = shown
   for (const n of newOnes) log('WARN', n.text)
   // Don't beep for the "not connected" warning at startup; connection loss has its own sound.
   if (newOnes.some((n) => n.id !== 'conn')) fireEvent('warning')
@@ -840,6 +872,14 @@ ipcMain.handle('checkUpdates', async () => {
     return { status: 'error', current, message: 'No connection to GitHub' }
   }
 })
+ipcMain.on('ignoreWarning', (_e, id) => {
+  const w = st.warnings.find((x) => x.id === id)
+  if (!w || id === 'conn') return // "not connected" can't be ignored
+  ignored[id] = { until: Date.now() + settings.warnIgnoreMinutes * 60000, level: w.level || 0 }
+  log('WARN', `Warning ignored for up to ${settings.warnIgnoreMinutes} min: ${w.text}`)
+  updateWarnings()
+  publish()
+})
 ipcMain.on('openLogs', () => {
   fs.mkdirSync(logDir(), { recursive: true })
   shell.openPath(logDir())
@@ -959,6 +999,13 @@ function setupDemo(demo) {
   send('audioChannels', audioChannels)
   updateWarnings()
   publish()
+  // ATEM_ALERT_DEMO_DISK=<ms>:<minutes> lowers the free disk time later (to test warnings)
+  const [after, minutes] = (process.env.ATEM_ALERT_DEMO_DISK || '').split(':').map(Number)
+  if (after) setTimeout(() => {
+    st.rec.timeAvailableSec = minutes * 60
+    updateWarnings()
+    publish()
+  }, after)
 }
 
 // ---------- Startup ----------

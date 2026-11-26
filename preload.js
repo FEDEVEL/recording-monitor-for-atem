@@ -18,4 +18,5 @@ contextBridge.exposeInMainWorld('atemAlert', {
   setAudioMeters: (on) => ipcRenderer.send('setAudioMeters', on),
   openProjectPage: (which) => ipcRenderer.send('openProjectPage', which),
   checkUpdates: () => ipcRenderer.invoke('checkUpdates'),
+  ignoreWarning: (id) => ipcRenderer.send('ignoreWarning', id),
 })

@@ -93,6 +93,17 @@ when a monitor appears or disappears.
 | flashing red **LOST CONNECTION TO ATEM** | the network connection dropped while recording |
 | dark yellow **NO CONNECTION** | the app can't reach the ATEM; it keeps retrying |
 
+### Ignoring a yellow warning
+If you already know about a warning (for example *no audio* because no microphone is connected), click
+**✕ Ignore** on it: the status turns green again and a small grey line shows what is being ignored.
+Ignoring is always **temporary**. The warning comes back:
+- when it **gets worse** (low disk space warns again below 15, 10 and 5 minutes left),
+- after **10 minutes** at the latest (`warnIgnoreMinutes` in `settings.json`),
+- when the problem goes away and later happens again,
+- with the next recording.
+
+Red alarms and *not connected* can't be ignored.
+
 > **Why does every stop raise an alarm?** The ATEM doesn't report *who* stopped the recording. So every stop
 > is announced, and you simply click **OK** after you stopped it yourself. If the ATEM reports an error, the stop is
 > marked **UNEXPECTED**.
@@ -160,7 +171,7 @@ A `~` before the position means it is approximate (the app was started while the
 | **About line** | version, license, **GitHub ↗** link and **Check for updates** (asks GitHub for the latest release, only when you click it) |
 
 Advanced options are in `settings.json` (in the folder above `logs`):
-`lowDiskWarnMinutes` (30), `silenceWarnSeconds` (20), `silenceThresholdDb` (-50), `cursorGraceSeconds` (3),
+`lowDiskWarnMinutes` (30), `warnIgnoreMinutes` (10), `silenceWarnSeconds` (20), `silenceThresholdDb` (-50), `cursorGraceSeconds` (3),
 `logRetentionDays` (90), `sessionRetentionDays` (365; 0 = keep forever).
 
 ### Logs and files
