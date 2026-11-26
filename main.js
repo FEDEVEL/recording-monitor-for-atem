@@ -984,6 +984,8 @@ if (isFirstInstance) app.whenReady().then(() => {
   for (const [k, b] of Object.entries(settings.boundsByLayout || {})) if (!fitsLayout(b, k)) delete settings.boundsByLayout[k]
   // stop the OS from suspending us (timers, network) during long sessions
   powerSaveBlocker.start('prevent-app-suspension')
+  // macOS takes the Dock icon from the app bundle; when run with "npm start" that is Electron's own icon
+  if (process.platform === 'darwin' && app.dock) app.dock.setIcon(path.join(__dirname, 'build', 'icon.png'))
   createWindow()
   if (process.env.ATEM_ALERT_DEMO) setupDemo(process.env.ATEM_ALERT_DEMO)
   else connectAtem()
