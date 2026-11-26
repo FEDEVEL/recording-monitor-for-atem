@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="build/icon.png" width="96" alt="ATEM Recording Alert icon">
+  <img src="build/icon.png" width="96" alt="Recording Monitor for ATEM icon">
 </p>
 
-<h1 align="center">ATEM Recording Alert</h1>
+<h1 align="center">Recording Monitor for ATEM</h1>
 
 <p align="center">
   <b>Never lose an interview again because your ATEM silently stopped recording.</b><br>
-  A small desktop app that watches a Blackmagic ATEM Mini Pro / ISO over the network,<br>
+  A small desktop app that watches a Blackmagic ATEM Mini Pro / ISO switcher over the network,<br>
   shows the recording status in big letters and alerts you, on screen and in your headphones, the moment recording stops.
 </p>
 
@@ -54,7 +54,7 @@ This app sits in a corner of your monitor and makes a stopped recording **imposs
 ## Installation
 
 ### Windows
-1. Download `ATEM-Recording-Alert-<version>-portable.exe` from the [**Releases**](../../releases) page.
+1. Download `Recording-Monitor-for-ATEM-<version>-portable.exe` from the [**Releases**](../../releases) page.
 2. Run it. No installation needed; it's a single portable file.
 3. The app is not code-signed, so Windows SmartScreen may warn you the first time: click **More info → Run anyway**.
 4. If Windows Firewall asks, allow access on **private networks** (the ATEM uses UDP port 9910).
@@ -160,9 +160,9 @@ Advanced options are in `settings.json` (in the folder above `logs`):
 ### Logs and files
 | | Windows | macOS |
 |---|---|---|
-| Logs | `%APPDATA%\ATEM Recording Alert\logs\` | `~/Library/Application Support/ATEM Recording Alert/logs/` |
+| Logs | `%APPDATA%\Recording Monitor for ATEM\logs\` | `~/Library/Application Support/Recording Monitor for ATEM/logs/` |
 | Session files | `…\logs\sessions\` | `…/logs/sessions/` |
-| Settings | `%APPDATA%\ATEM Recording Alert\settings.json` | `~/Library/Application Support/ATEM Recording Alert/settings.json` |
+| Settings | `%APPDATA%\Recording Monitor for ATEM\settings.json` | `~/Library/Application Support/Recording Monitor for ATEM/settings.json` |
 
 The daily log records every connection change, every recording state change with the raw ATEM error code and disk
 status, alarms, and a heartbeat every minute while recording. Old files are deleted automatically: logs after

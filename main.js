@@ -1,4 +1,4 @@
-// ATEM Recording Alert - main process
+// Recording Monitor for ATEM - main process
 // Connects to the ATEM, watches recording status, decides alerts, writes an event log.
 const { app, BrowserWindow, ipcMain, shell, powerSaveBlocker, screen, dialog, session } = require('electron')
 const path = require('path')
@@ -686,7 +686,7 @@ function createWindow() {
     icon: path.join(__dirname, 'build', 'icon.png'),
     minWidth: 260,
     minHeight: 200,
-    title: 'ATEM Recording Alert',
+    title: 'Recording Monitor for ATEM',
     backgroundColor: '#111111',
     alwaysOnTop: settings.alwaysOnTop,
     acceptFirstMouse: true, // macOS: a click on the inactive window presses the button right away
@@ -745,7 +745,7 @@ function createWindow() {
       buttons: ['Keep watching', 'Quit anyway'],
       defaultId: 0,
       cancelId: 0,
-      title: 'ATEM Recording Alert',
+      title: 'Recording Monitor for ATEM',
       message: st.rec.state === 'recording' ? 'The ATEM is recording!' : 'An interview is running!',
       detail: 'If you quit now, you will NOT be alerted if the recording stops.',
     })
@@ -936,6 +936,32 @@ function setupDemo(demo) {
 // Dev helper: ATEM_ALERT_USERDATA=<folder> keeps test settings/logs away from the real ones
 if (process.env.ATEM_ALERT_USERDATA) app.setPath('userData', process.env.ATEM_ALERT_USERDATA)
 
+// The app was called "ATEM Recording Alert" before v0.2.0: move its settings and logs to the new folder once
+function migrateOldDataFolder() {
+  if (process.env.ATEM_ALERT_USERDATA) return
+  const oldDir = path.join(app.getPath('appData'), 'ATEM Recording Alert')
+  const newDir = app.getPath('userData')
+  if (!fs.existsSync(oldDir) || oldDir === newDir) return
+  const moved = []
+  try {
+    fs.mkdirSync(newDir, { recursive: true })
+    for (const item of ['settings.json', 'logs']) {
+      const from = path.join(oldDir, item), to = path.join(newDir, item)
+      if (fs.existsSync(from) && !fs.existsSync(to)) {
+        fs.cpSync(from, to, { recursive: true })
+        fs.rmSync(from, { recursive: true, force: true })
+        moved.push(item)
+      }
+    }
+    // leave a note in the old folder (it only holds browser cache files now)
+    fs.writeFileSync(path.join(oldDir, 'MOVED.txt'), `Settings and logs moved to:\n${newDir}\nThis folder can be deleted.\n`)
+  } catch (e) {
+    console.error('Migration failed', e)
+  }
+  if (moved.length) app.whenReady().then(() => log('APP', `Moved ${moved.join(' and ')} from the old "ATEM Recording Alert" folder`))
+}
+migrateOldDataFolder()
+
 // Unexpected errors are logged instead of silently killing the app
 process.on('uncaughtException', (e) => log('ERROR', 'Unexpected error: ' + (e && e.stack ? e.stack : e)))
 process.on('unhandledRejection', (e) => log('ERROR', 'Unhandled promise rejection: ' + (e && e.stack ? e.stack : e)))
@@ -962,7 +988,7 @@ if (isFirstInstance) app.whenReady().then(() => {
   if (process.env.ATEM_ALERT_DEMO) setupDemo(process.env.ATEM_ALERT_DEMO)
   else connectAtem()
   startTimers()
-  log('APP', `ATEM Recording Alert ${app.getVersion()} started. Logs: ${logDir()}`)
+  log('APP', `Recording Monitor for ATEM ${app.getVersion()} started. Logs: ${logDir()}`)
   cleanupOldFiles()
   setInterval(cleanupOldFiles, 24 * 3600 * 1000)
 })

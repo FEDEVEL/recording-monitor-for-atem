@@ -1,7 +1,7 @@
 {
-  "name": "atem-recording-alert",
+  "name": "recording-monitor-for-atem",
   "version": "0.2.0",
-  "description": "Shows ATEM Mini recording status and audio levels, alerts when recording stops",
+  "description": "Recording monitor for Blackmagic ATEM switchers: shows recording status and alerts you when recording stops",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -20,10 +20,10 @@
     "electron": "45.5.0",
     "electron-builder": "26.18.0"
   },
-  "productName": "ATEM Recording Alert",
+  "productName": "Recording Monitor for ATEM",
   "build": {
-    "appId": "com.local.atemrecordingalert",
-    "productName": "ATEM Recording Alert",
+    "appId": "com.fedevel.recordingmonitorforatem",
+    "productName": "Recording Monitor for ATEM",
     "files": [
       "main.js",
       "preload.js",
@@ -43,11 +43,16 @@
       "allowToChangeInstallationDirectory": true
     },
     "portable": {
-      "artifactName": "ATEM-Recording-Alert-${version}-portable.exe"
+      "artifactName": "Recording-Monitor-for-ATEM-${version}-portable.exe"
     },
     "directories": {
       "output": "dist"
     },
     "npmRebuild": false
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/FEDEVEL/recording-monitor-for-atem.git"
+  },
+  "homepage": "https://github.com/FEDEVEL/recording-monitor-for-atem"
 }

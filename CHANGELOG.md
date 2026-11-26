@@ -1,6 +1,9 @@
 # Changelog
 
 ## 0.2.0 (2026-11-26)
+### Changed
+- Renamed from "ATEM Recording Alert" to **Recording Monitor for ATEM**; existing settings and logs are moved automatically
+
 ### Added
 - Close protection while recording or during an interview ("Keep watching / Quit anyway")
 - Crash recovery for the display, logging of unexpected errors
