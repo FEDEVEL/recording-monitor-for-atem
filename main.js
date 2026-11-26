@@ -443,7 +443,12 @@ function updateWarnings() {
 }
 
 // ---------- ATEM connection ----------
+const CONNECTION_GRACE_MS = 2000
+let disconnectTimer = null
+let disconnectedAt = null
 function connectAtem() {
+  clearTimeout(disconnectTimer)
+  disconnectTimer = null
   if (atem) {
     try {
       atem.removeAllListeners()
@@ -458,6 +463,12 @@ function connectAtem() {
   atem.on('error', (e) => log('ERROR', 'ATEM library error: ' + e))
 
   atem.on('connected', async () => {
+    if (disconnectTimer) {
+      // the connection was only interrupted briefly (the ATEM does this e.g. when a recording starts)
+      clearTimeout(disconnectTimer)
+      disconnectTimer = null
+      log('CONN', `Brief connection reset (${Date.now() - disconnectedAt} ms) - ignored`)
+    }
     st.connection = 'connected'
     st.model = atem.state?.info?.productIdentifier || 'ATEM'
     log('CONN', `Connected to ${st.model} at ${settings.ip}`)
@@ -483,26 +494,16 @@ function connectAtem() {
     }
   })
 
+  // A disconnect only counts after CONNECTION_GRACE_MS: the ATEM briefly resets the connection now and
+  // then (e.g. right when a recording starts) and reconnects within a fraction of a second.
   atem.on('disconnected', () => {
-    const wasRecording = st.rec.state === 'recording'
-    st.connection = 'disconnected'
-    log('CONN', `Disconnected from ATEM (was ${st.rec.state})`)
-    if (wasRecording) {
-      st.alarm = {
-        level: 'red',
-        kind: 'connlost',
-        title: 'LOST CONNECTION TO ATEM',
-        detail: 'Was recording when connection dropped - check the ATEM (power? network? crashed?)',
-        time: Date.now(),
-      }
-      sessionWrite('LOST CONNECTION TO ATEM while recording', true)
-      log('ALARM', 'Lost connection to ATEM while recording')
-      fireEvent('conn-lost')
-    }
-    st.rec.state = 'unknown'
-    prevRecState = 'unknown'
-    updateWarnings()
-    publish()
+    if (disconnectTimer || st.connection !== 'connected') return
+    disconnectedAt = Date.now()
+    const recStateAtDisconnect = st.rec.state
+    disconnectTimer = setTimeout(() => {
+      disconnectTimer = null
+      handleDisconnected(recStateAtDisconnect)
+    }, CONNECTION_GRACE_MS)
   })
 
   atem.on('stateChanged', (state, paths) => {
@@ -533,8 +534,41 @@ function connectAtem() {
     if (l.type === 'master' && Math.max(entry.l, entry.r) > settings.silenceThresholdDb) lastLoudAudioAt = Date.now()
   })
 
+  // Dev helper: ATEM_ALERT_TEST_RESET=<after ms>:<offline ms> drops and restores the connection once (tests only)
+  const [resetAfter, offlineMs] = (process.env.ATEM_ALERT_TEST_RESET || '').split(':').map(Number)
+  if (resetAfter && !connectAtem.testDone) {
+    connectAtem.testDone = true
+    setTimeout(async () => {
+      log('TEST', `Simulating connection loss for ${offlineMs} ms`)
+      await atem.disconnect()
+      setTimeout(() => atem.connect(settings.ip), offlineMs)
+    }, resetAfter)
+  }
+
   log('CONN', `Connecting to ATEM at ${settings.ip} ...`)
   atem.connect(settings.ip).catch((e) => log('ERROR', 'Connect failed: ' + e.message))
+}
+
+function handleDisconnected(recStateAtDisconnect) {
+  const wasRecording = recStateAtDisconnect === 'recording'
+  st.connection = 'disconnected'
+  log('CONN', `Disconnected from ATEM (was ${recStateAtDisconnect}, no connection for ${CONNECTION_GRACE_MS / 1000} s)`)
+  if (wasRecording) {
+    st.alarm = {
+      level: 'red',
+      kind: 'connlost',
+      title: 'LOST CONNECTION TO ATEM',
+      detail: 'Was recording when connection dropped - check the ATEM (power? network? crashed?)',
+      time: Date.now(),
+    }
+    sessionWrite('LOST CONNECTION TO ATEM while recording', true)
+    log('ALARM', 'Lost connection to ATEM while recording')
+    fireEvent('conn-lost')
+  }
+  st.rec.state = 'unknown'
+  prevRecState = 'unknown'
+  updateWarnings()
+  publish()
 }
 
 // Cursor check: during an interview the mouse should rest on this app, not on the cameras / shared screen

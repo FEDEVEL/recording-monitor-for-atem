@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+### Fixed
+- Brief yellow "NO CONNECTION" flash when a recording starts: the ATEM sometimes resets its connection for a fraction of a second. Interruptions shorter than 2 s are now ignored (and logged); a real outage still raises the alarm after 2 s
+
 ### Changed
 - Sounds that can happen while someone is talking are **off by default** (warnings, marks, connection lost/restored, cursor) and can be enabled in ⚙ → *Extra sounds*; they may end up in the recording
 - *Test alerts* has a *Lost connection alarm*
