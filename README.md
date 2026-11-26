@@ -13,7 +13,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS-blue" alt="Platform: Windows | macOS">
   <img src="https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-lightgrey" alt="License: CC BY-NC-SA 4.0">
-  <img src="https://img.shields.io/badge/version-0.2.0-green" alt="Version 0.2.0">
+  <img src="https://img.shields.io/badge/version-0.2.1-green" alt="Version 0.2.1">
 </p>
 
 <p align="center">

@@ -1,6 +1,6 @@
 {
   "name": "recording-monitor-for-atem",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Recording monitor for Blackmagic ATEM switchers: shows recording status and alerts you when recording stops",
   "main": "main.js",
   "scripts": {

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.1 (2026-11-26)
 ### Added
 - Automated smoke test against a real ATEM (`npm run smoke-test`), ~50 checks, refuses to run while recording
 
@@ -15,8 +15,6 @@
 ## 0.2.0 (2026-11-26)
 ### Changed
 - Renamed from "ATEM Recording Alert" to **Recording Monitor for ATEM**; existing settings and logs are moved automatically
-
-### Changed
 - Interview **↺ Resume** continues from the value at *End*; the paused time is not counted (logged in the session file)
 
 ### Added
