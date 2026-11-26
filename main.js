@@ -30,6 +30,7 @@ const DEFAULT_SETTINGS = {
   silenceWarnSeconds: 20,
   silenceThresholdDb: -50,
   volume: 0.6,
+  warningBeeps: false, // yellow warnings are silent by default (only red alarms make sound)
   cursorCheck: true, // warn when the mouse leaves this window during an interview
   cursorBeep: false, // ...and beep
   cursorGraceSeconds: 3,
@@ -433,7 +434,7 @@ function updateWarnings() {
   st.warnings = shown
   for (const n of newOnes) log('WARN', n.text)
   // Don't beep for the "not connected" warning at startup; connection loss has its own sound.
-  if (newOnes.some((n) => n.id !== 'conn')) fireEvent('warning')
+  if (settings.warningBeeps && newOnes.some((n) => n.id !== 'conn')) fireEvent('warning')
 }
 
 // ---------- ATEM connection ----------
@@ -834,6 +835,12 @@ ipcMain.on('setCursorOptions', (_e, o) => {
   if (typeof o.beep === 'boolean') settings.cursorBeep = o.beep
   saveSettings()
   checkCursor()
+  publish()
+})
+ipcMain.on('setWarningBeeps', (_e, on) => {
+  settings.warningBeeps = !!on
+  saveSettings()
+  log('APP', 'Warning beeps ' + (on ? 'on' : 'off'))
   publish()
 })
 ipcMain.on('setAudioMeters', async (_e, on) => {

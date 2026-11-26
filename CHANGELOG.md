@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+### Changed
+- Yellow warnings no longer beep by default (new **Warning beeps** option in ⚙); red alarms still do
+- "On top" renamed to **Always on top**
+
 ## 0.2.0 (2026-11-26)
 ### Changed
 - Renamed from "ATEM Recording Alert" to **Recording Monitor for ATEM**; existing settings and logs are moved automatically

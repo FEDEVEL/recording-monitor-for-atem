@@ -118,11 +118,12 @@ Red alarms and *not connected* can't be ignored.
 | Unexpected stop (ATEM error) | 3 long beeps + siren, repeating every 6 s until **OK** |
 | Lost connection while recording | siren, repeating until **OK** |
 | Connection back, still recording | 3 rising beeps |
-| New yellow warning | 2 short beeps |
+| New yellow warning | 2 short beeps (only if **Warning beeps** is on in ⚙; off by default) |
 | Interview start / end / mark | 2 rising tones / 2 falling tones / short blip |
 | Cursor outside window (optional) | one soft low tone |
 
-Sounds play on the computer's default audio output.
+Sounds play on the computer's default audio output. **Make sure that is your headphones**, not the HDMI output
+to the ATEM, otherwise the beeps can end up in the recording.
 
 ### Interview timer
 The recording usually starts before the interview and ends after it. The blue **interview bar** measures the interview itself:
@@ -164,7 +165,8 @@ A `~` before the position means it is approximate (the app was started while the
 | Setting | |
 |---|---|
 | **IP** | ATEM IP address |
-| **On top** | keep the window above other windows |
+| **Always on top** | keep the window above other windows |
+| **Warning beeps** | beep when a yellow warning appears (off by default; red alarms always make sound) |
 | **Audio meters** | off = lowest CPU use (also disables the "no audio" warning) |
 | **Cursor check / Cursor beep** | see [Cursor check](#cursor-check) |
 | **🔊 volume** | volume of the alert sounds |

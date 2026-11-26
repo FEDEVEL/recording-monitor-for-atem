@@ -119,6 +119,7 @@ function render() {
   if (document.activeElement !== $('ipInput')) setProp('ipInput', 'value', s.ip)
   setText('version', 'v' + s.version)
   setProp('onTop', 'checked', !!s.settings.alwaysOnTop)
+  setProp('warnBeep', 'checked', !!s.settings.warningBeeps)
   setProp('cursorCheck', 'checked', !!s.settings.cursorCheck)
   setProp('cursorBeep', 'checked', !!s.settings.cursorBeep)
   setProp('cursorBeep', 'disabled', !s.settings.cursorCheck)
@@ -271,6 +272,7 @@ $('ackBtn').onclick = () => {
 $('ipInput').onchange = (e) => api.setIp(e.target.value)
 $('onTop').onchange = (e) => api.setAlwaysOnTop(e.target.checked)
 $('cursorCheck').onchange = (e) => api.setCursorOptions({ check: e.target.checked })
+$('warnBeep').onchange = (e) => api.setWarningBeeps(e.target.checked)
 $('meterToggle').onchange = (e) => api.setAudioMeters(e.target.checked)
 $('cursorBeep').onchange = (e) => api.setCursorOptions({ beep: e.target.checked })
 $('volume').oninput = (e) => {
