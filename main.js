@@ -1,6 +1,6 @@
 // ATEM Recording Alert - main process
 // Connects to the ATEM, watches recording status, decides alerts, writes an event log.
-const { app, BrowserWindow, ipcMain, shell, powerSaveBlocker, screen } = require('electron')
+const { app, BrowserWindow, ipcMain, shell, powerSaveBlocker, screen, dialog, session } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const { Atem } = require('atem-connection')
@@ -46,7 +46,10 @@ function loadSettings() {
 }
 function saveSettings() {
   try {
-    fs.writeFileSync(settingsFile(), JSON.stringify(settings, null, 2))
+    // write to a temp file first, then rename: a crash mid-save can't leave a half-written settings file
+    const tmp = settingsFile() + '.tmp'
+    fs.writeFileSync(tmp, JSON.stringify(settings, null, 2))
+    fs.renameSync(tmp, settingsFile())
   } catch (e) {
     log('ERROR', 'Could not save settings: ' + e.message)
   }
@@ -201,9 +204,10 @@ function send(channel, payload) {
   if (win && !win.isDestroyed()) win.webContents.send(channel, payload)
 }
 function publish() {
-  send('state', { ...st, ip: settings.ip, settings, now: Date.now() })
+  send('state', { ...st, ip: settings.ip, settings, version: app.getVersion(), now: Date.now() })
 }
 function fireEvent(type, extra) {
+  if (type === 'rec-stop' || type === 'rec-stop-unexpected' || type === 'conn-lost') demandAttention()
   send('event', { type, ...extra })
 }
 
@@ -508,6 +512,23 @@ function checkCursor() {
   }
 }
 
+function shiftTimestamps(jump) {
+  const sh = (o, k) => o && typeof o[k] === 'number' && (o[k] += jump)
+  sh(st, 'recStartedAt')
+  for (const iv of [st.interview, st.interview.previous]) {
+    if (!iv) continue
+    ;['startedAt', 'endedAt', 'firstStartedAt', 'resumedAt'].forEach((k) => sh(iv, k))
+    sh(iv.lastMark, 'time')
+  }
+  if (cursorOutsideSince) cursorOutsideSince += jump
+  if (lastDurationChangeAt) lastDurationChangeAt += jump
+  lastLoudAudioAt += jump
+  if (lastTc) lastTc.at += jump
+  log('CLOCK', `Computer clock jumped by ${(jump / 1000).toFixed(1)} s - timers corrected`)
+  saveInterview()
+  publish()
+}
+
 // Periodic jobs
 function startTimers() {
   setInterval(checkCursor, 1000) // once per second is plenty; reading the cursor position is very cheap
@@ -528,6 +549,22 @@ function startTimers() {
     updateWarnings()
     if (JSON.stringify(st.warnings) !== before || st.rec.state === 'recording') publish()
   }, 1000)
+  // Clock jumps: if the computer's clock is corrected (time sync, manual change), shift all stored
+  // timestamps by the same amount so recording/interview timers don't jump.
+  let lastWall = Date.now()
+  let lastMono = performance.now()
+  setInterval(() => {
+    const wall = Date.now(), mono = performance.now()
+    const jump = wall - lastWall - (mono - lastMono)
+    lastWall = wall
+    lastMono = mono
+    if (Math.abs(jump) > 1500) shiftTimestamps(jump)
+  }, 1000)
+  // memory use to the log every 30 min (to spot leaks in long sessions)
+  setInterval(() => {
+    const total = app.getAppMetrics().reduce((s, m) => s + (m.memory?.workingSetSize || 0), 0)
+    log('MEM', `App memory ${Math.round(total / 1024)} MB (main heap ${Math.round(process.memoryUsage().heapUsed / 1048576)} MB)`)
+  }, 30 * 60 * 1000)
   // heartbeat to the log while recording (helps reconstructing what happened)
   setInterval(() => {
     if (st.rec.state === 'recording')
@@ -541,11 +578,88 @@ function startTimers() {
   }, 60000)
 }
 
+// ---------- Window position per monitor setup ----------
+// The window position is remembered separately for each monitor arrangement (e.g. "1 monitor" and
+// "2 monitors"). When a monitor appears or disappears, the window moves to the position saved for the
+// new arrangement. A saved position is only used if it is really visible on a connected screen.
+const layoutKey = () =>
+  screen
+    .getAllDisplays()
+    .map((d) => `${d.bounds.x},${d.bounds.y},${d.bounds.width}x${d.bounds.height}`)
+    .sort()
+    .join('|')
+function isOnScreen(b) {
+  return (
+    b &&
+    screen.getAllDisplays().some((d) => {
+      const a = d.workArea
+      const w = Math.min(b.x + b.width, a.x + a.width) - Math.max(b.x, a.x)
+      const h = Math.min(b.y + b.height, a.y + a.height) - Math.max(b.y, a.y)
+      return w >= 120 && h >= 80 // enough of the window visible to grab it
+    })
+  )
+}
+function savedBounds() {
+  const b = (settings.boundsByLayout || {})[layoutKey()]
+  if (isOnScreen(b)) return b
+  if (isOnScreen(settings.bounds)) return settings.bounds
+  return null
+}
+let suppressBoundsSaveUntil = 0
+function rememberBounds() {
+  if (!win || win.isDestroyed() || win.isMinimized() || Date.now() < suppressBoundsSaveUntil) return
+  const b = win.getBounds()
+  settings.boundsByLayout = settings.boundsByLayout || {}
+  delete settings.boundsByLayout[layoutKey()] // re-insert so the most recent layouts are kept
+  settings.boundsByLayout[layoutKey()] = b
+  const keys = Object.keys(settings.boundsByLayout)
+  for (const k of keys.slice(0, Math.max(0, keys.length - 10))) delete settings.boundsByLayout[k]
+  settings.bounds = b
+  saveSettings()
+}
+let lastLayout = null
+function onDisplaysChanged() {
+  if (!win || win.isDestroyed()) return
+  const key = layoutKey()
+  if (key === lastLayout) return
+  lastLayout = key
+  // the OS moves the window itself when a monitor disappears - don't save that as "my position"
+  suppressBoundsSaveUntil = Date.now() + 3000
+  setTimeout(() => {
+    if (!win || win.isDestroyed()) return
+    const b = (settings.boundsByLayout || {})[layoutKey()]
+    if (isOnScreen(b)) {
+      win.setBounds(b)
+      log('APP', `Monitor setup changed (${screen.getAllDisplays().length} display(s)) - window moved to saved position`)
+    } else if (!isOnScreen(win.getBounds())) {
+      const wa = screen.getPrimaryDisplay().workArea
+      const cur = win.getBounds()
+      win.setBounds({ x: wa.x + 40, y: wa.y + 40, width: Math.min(cur.width, wa.width - 80), height: Math.min(cur.height, wa.height - 80) })
+      log('APP', 'Monitor setup changed - window was off-screen, moved to main screen')
+    } else {
+      log('APP', `Monitor setup changed (${screen.getAllDisplays().length} display(s)) - no saved position for this setup`)
+    }
+    suppressBoundsSaveUntil = Date.now() + 1000
+  }, 1000)
+}
+
+// Bring the window to the user's attention on an alarm (without stealing keyboard focus from Zoom)
+function demandAttention() {
+  if (!win || win.isDestroyed()) return
+  if (win.isMinimized()) win.restore()
+  if (!win.isVisible()) win.showInactive()
+  win.moveTop()
+  win.flashFrame(true) // Windows: flashing taskbar button; macOS: bouncing Dock icon
+}
+
 // ---------- Window ----------
+let quitConfirmed = false
 function createWindow() {
   const devSize = process.env.ATEM_ALERT_SIZE && process.env.ATEM_ALERT_SIZE.split('x').map(Number)
+  lastLayout = layoutKey()
   win = new BrowserWindow({
-    ...(devSize ? { width: devSize[0], height: devSize[1] } : settings.bounds),
+    ...(devSize ? { width: devSize[0], height: devSize[1] } : savedBounds() || { width: 900, height: 900 }),
+    icon: path.join(__dirname, 'build', 'icon.png'),
     minWidth: 260,
     minHeight: 200,
     title: 'ATEM Recording Alert',
@@ -556,22 +670,67 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
       backgroundThrottling: false, // keep timers/sounds running when window is not focused
       autoplayPolicy: 'no-user-gesture-required',
     },
   })
   win.setMenuBarVisibility(false)
+
+  // Security: this window only ever shows our own page - no navigation, no popups, no permissions
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  win.webContents.on('will-navigate', (e) => e.preventDefault())
+  session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(false))
+
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'))
-  const saveBounds = () => {
-    if (!win.isDestroyed() && !win.isMinimized()) {
-      settings.bounds = win.getBounds()
-      saveSettings()
-    }
-  }
   if (!devSize) {
-    win.on('resized', saveBounds)
-    win.on('moved', saveBounds)
+    win.on('resized', rememberBounds)
+    win.on('moved', rememberBounds)
+    screen.on('display-added', onDisplaysChanged)
+    screen.on('display-removed', onDisplaysChanged)
+    screen.on('display-metrics-changed', onDisplaysChanged)
   }
+  win.on('focus', () => win.flashFrame(false))
+
+  // Crash recovery: if the display part crashes or hangs, reload it (the ATEM watching keeps running)
+  win.webContents.on('render-process-gone', (_e, d) => {
+    log('ERROR', 'Display process gone: ' + d.reason)
+    if (d.reason !== 'clean-exit') setTimeout(() => win && !win.isDestroyed() && win.reload(), 1000)
+  })
+  let hangTimer = null
+  win.on('unresponsive', () => {
+    log('ERROR', 'Display not responding')
+    hangTimer = setTimeout(() => {
+      log('ERROR', 'Display still not responding - reloading')
+      win.webContents.forcefullyCrashRenderer()
+      win.reload()
+    }, 10000)
+  })
+  win.on('responsive', () => {
+    clearTimeout(hangTimer)
+    log('APP', 'Display responding again')
+  })
+
+  // Accidental close protection while recording / interview running
+  win.on('close', (e) => {
+    if (quitConfirmed) return
+    const busy = st.rec.state === 'recording' || st.interview.state === 'running'
+    if (!busy) return
+    const r = dialog.showMessageBoxSync(win, {
+      type: 'warning',
+      buttons: ['Keep watching', 'Quit anyway'],
+      defaultId: 0,
+      cancelId: 0,
+      title: 'ATEM Recording Alert',
+      message: st.rec.state === 'recording' ? 'The ATEM is recording!' : 'An interview is running!',
+      detail: 'If you quit now, you will NOT be alerted if the recording stops.',
+    })
+    if (r === 0) e.preventDefault()
+    else {
+      quitConfirmed = true
+      log('APP', 'Quit confirmed while ' + (st.rec.state === 'recording' ? 'recording' : 'interview running'))
+    }
+  })
   win.webContents.on('did-finish-load', () => {
     send('audioChannels', audioChannels)
     publish()
@@ -581,6 +740,7 @@ function createWindow() {
 // ---------- IPC from UI ----------
 ipcMain.on('ack', () => {
   if (st.alarm) log('ACK', 'Alarm acknowledged: ' + st.alarm.title)
+  if (win && !win.isDestroyed()) win.flashFrame(false)
   st.alarm = null
   publish()
 })
@@ -714,7 +874,23 @@ ipcMain.on('simulate', (_e, what) => {
 // ---------- Startup ----------
 // Dev helper: ATEM_ALERT_USERDATA=<folder> keeps test settings/logs away from the real ones
 if (process.env.ATEM_ALERT_USERDATA) app.setPath('userData', process.env.ATEM_ALERT_USERDATA)
-app.whenReady().then(() => {
+
+// Unexpected errors are logged instead of silently killing the app
+process.on('uncaughtException', (e) => log('ERROR', 'Unexpected error: ' + (e && e.stack ? e.stack : e)))
+process.on('unhandledRejection', (e) => log('ERROR', 'Unhandled promise rejection: ' + (e && e.stack ? e.stack : e)))
+app.on('child-process-gone', (_e, d) => log('ERROR', `Helper process gone: ${d.type} (${d.reason})`))
+
+// Only one copy: starting the app again just brings the existing window to the front
+const isFirstInstance = app.requestSingleInstanceLock()
+if (!isFirstInstance) app.quit()
+app.on('second-instance', () => {
+  if (!win || win.isDestroyed()) return
+  if (win.isMinimized()) win.restore()
+  win.show()
+  win.focus()
+})
+
+if (isFirstInstance) app.whenReady().then(() => {
   loadSettings()
   if (settings.interview && settings.interview.state) st.interview = settings.interview
   // stop the OS from suspending us (timers, network) during long sessions
@@ -732,7 +908,7 @@ app.on('window-all-closed', () => {
 })
 
 // Dev helper: ATEM_ALERT_SNAPSHOT=/path/file.png saves a screenshot of the window after a few seconds
-if (process.env.ATEM_ALERT_SNAPSHOT) {
+if (process.env.ATEM_ALERT_SNAPSHOT && isFirstInstance) {
   app.whenReady().then(() =>
     setTimeout(async () => {
       if (process.env.ATEM_ALERT_SIM) ipcMain.emit('simulate', {}, process.env.ATEM_ALERT_SIM)
@@ -743,7 +919,10 @@ if (process.env.ATEM_ALERT_SNAPSHOT) {
       await new Promise((r) => setTimeout(r, 600))
       const img = await win.webContents.capturePage()
       fs.writeFileSync(process.env.ATEM_ALERT_SNAPSHOT, img.toPNG())
-      if (process.env.ATEM_ALERT_SNAPSHOT_QUIT) app.quit()
+      if (process.env.ATEM_ALERT_SNAPSHOT_QUIT) {
+        quitConfirmed = true
+        app.quit()
+      }
     }, Number(process.env.ATEM_ALERT_SNAPSHOT_DELAY || 5000))
   )
 }

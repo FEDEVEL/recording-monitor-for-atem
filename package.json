@@ -1,6 +1,6 @@
 {
   "name": "atem-recording-alert",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Shows ATEM Mini recording status and audio levels, alerts when recording stops",
   "main": "main.js",
   "scripts": {
@@ -28,7 +28,8 @@
       "main.js",
       "preload.js",
       "renderer/**",
-      "package.json"
+      "package.json",
+      "build/icon.png"
     ],
     "win": {
       "target": [

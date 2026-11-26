@@ -82,6 +82,27 @@ Measured on an M4 Pro Mac: about **12 % of one CPU core with audio meters on**, 
 (⚙ → *Audio meters*). Almost all of the cost is the ATEM's audio level stream (~420 messages/s) and drawing the
 meters. Switching the meters off also disables the "no audio on MASTER" warning. Cursor check runs once per second.
 
+## Reliability
+- **Close protection**: while recording or during an interview, closing the window asks "Keep watching / Quit anyway".
+- **Crash recovery**: if the display part crashes or hangs (10 s), it is reloaded automatically; errors are logged.
+- **Single copy**: starting the app again just brings the existing window to the front.
+- **Alarms bring the window up** (restored if minimized, moved on top, taskbar flashes) without taking keyboard focus.
+- **Window position per monitor setup**: remembered separately for e.g. 1 and 2 monitors; when a monitor
+  appears/disappears the window moves to the position saved for that setup. Off-screen positions are never used.
+- **Clock corrections** (time sync) are detected and the timers are corrected, so they don't jump.
+- Memory use is written to the log every 30 min.
+
+## Maintenance (every few months, and after an ATEM firmware update)
+Versions are pinned, so security fixes don't arrive automatically. Deliberately:
+```bash
+npm outdated                         # see what's new
+npm install electron@<version>       # update deliberately, one package at a time
+npm audit --omit=dev                 # check for known vulnerabilities
+npm start                            # test: start/stop a short recording, interview timer, alarms
+```
+After an **ATEM firmware update**, always do a short test recording (start, stop) with the app running.
+The project is in **git**: `git log` shows history, `git diff` shows uncommitted changes.
+
 ## Settings
 IP address, *On top* and volume are in the footer. They are saved in `settings.json` next to the logs
 folder. That file also holds `lowDiskWarnMinutes`, `silenceWarnSeconds` and `silenceThresholdDb` if you want to tune the warnings.
@@ -91,3 +112,4 @@ folder. That file also holds `lowDiskWarnMinutes`, `silenceWarnSeconds` and `sil
 - `preload.js`: bridge to the UI
 - `renderer/`: UI (`app.js`), sounds (`sounds.js`, generated, no audio files), styles
 - `tools/probe.js`: command-line diagnostic
+- `build/icon.svg` / `icon.png`: app icon (`npx electron tools/make-icon.js` re-renders the PNG)

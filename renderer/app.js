@@ -99,6 +99,7 @@ function render() {
     : s.connection === 'connected' ? 'No disk' : '')
 
   if (document.activeElement !== $('ipInput')) setProp('ipInput', 'value', s.ip)
+  setText('version', 'v' + s.version)
   setProp('onTop', 'checked', !!s.settings.alwaysOnTop)
   setProp('cursorCheck', 'checked', !!s.settings.cursorCheck)
   setProp('cursorBeep', 'checked', !!s.settings.cursorBeep)
