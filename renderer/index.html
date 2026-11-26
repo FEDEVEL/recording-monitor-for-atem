@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'" />
+    <title>ATEM Recording Alert</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main id="app">
+      <section id="status" class="st-idle">
+        <div id="statusMain">
+          <span id="dot"></span>
+          <span id="statusText">CONNECTING…</span>
+        </div>
+        <div id="timer">--:--:--</div>
+        <div id="statusSub"></div>
+        <button id="ackBtn" hidden>OK – I have seen it</button>
+      </section>
+
+      <section id="interview">
+        <div id="ivNone" class="ivRow">
+          <button id="ivStart" class="ivBig">▶ START INTERVIEW</button>
+          <button id="ivResumePrev" hidden title="Continue the interview from the previous recording (same start time)">↺ Resume previous</button>
+        </div>
+        <div id="ivRunning" class="ivRow" hidden>
+          <span class="ivLabel">INTERVIEW</span>
+          <span id="ivTime" class="ivTime">00:00:00</span>
+          <span class="ivBtns">
+            <button id="ivMark" title="Mark this moment (e.g. something to cut)">⚑ Mark</button>
+            <button id="ivEnd" title="Interview finished">■ End</button>
+          </span>
+        </div>
+        <div id="ivEnded" class="ivRow" hidden>
+          <span class="ivLabel">INTERVIEW LENGTH</span>
+          <span id="ivLen" class="ivTime">00:00:00</span>
+          <span class="ivBtns">
+            <button id="ivResume" title="Pressed End by mistake? Continue the same interview">↺ Resume</button>
+            <button id="ivNew" title="Start timing a new interview">▶ New</button>
+          </span>
+        </div>
+        <div id="ivInfo"></div>
+      </section>
+
+      <section id="cursorWarn" hidden>🖱 CURSOR OUTSIDE THIS WINDOW – it may be visible in the recording</section>
+
+      <section id="warnings"></section>
+
+      <section id="meters"></section>
+
+      <footer>
+        <div id="info">
+          <span id="connInfo">–</span>
+          <span id="diskInfo">–</span>
+          <button id="settingsBtn" title="Settings and tests">⚙</button>
+        </div>
+        <div id="settingsPanel" hidden>
+        <div id="controls">
+          <label title="ATEM IP address">IP <input id="ipInput" size="13" /></label>
+          <label><input type="checkbox" id="onTop" /> On top</label>
+          <label title="Audio meters. Off = lowest CPU use (also disables the 'no audio' warning)"><input type="checkbox" id="meterToggle" /> Audio meters</label>
+          <label title="During an interview, warn when the mouse is not over this window"><input type="checkbox" id="cursorCheck" /> Cursor check</label>
+          <label title="Also beep when the cursor warning appears"><input type="checkbox" id="cursorBeep" /> Cursor beep</label>
+          <label title="Alert volume">🔊 <input type="range" id="volume" min="0" max="1" step="0.05" /></label>
+          <button id="testBtn">Test alerts ▾</button>
+          <button id="logsBtn">Open logs</button>
+          <button id="sessionsBtn">Open session files</button>
+        </div>
+        <div id="testMenu" hidden>
+          <button data-sim="start">Start beeps</button>
+          <button data-sim="stop">Stop alert</button>
+          <button data-sim="unexpected">Unexpected stop alarm</button>
+          <button data-sim="warning">Warning beep</button>
+        </div>
+        <div id="lastLog"></div>
+        </div>
+      </footer>
+    </main>
+    <script src="sounds.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

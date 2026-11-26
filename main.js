@@ -1,0 +1,749 @@
+// ATEM Recording Alert - main process
+// Connects to the ATEM, watches recording status, decides alerts, writes an event log.
+const { app, BrowserWindow, ipcMain, shell, powerSaveBlocker, screen } = require('electron')
+const path = require('path')
+const fs = require('fs')
+const { Atem } = require('atem-connection')
+
+// ---------- Constants (values from the ATEM protocol) ----------
+const REC_STATE = { 0: 'idle', 1: 'recording', 128: 'stopping' }
+const REC_ERROR_NONE = 2
+const REC_ERRORS = [
+  // [bit, short name, human text]
+  [4, 'MediaFull', 'Disk is full'],
+  [8, 'MediaError', 'Disk error (disk disconnected or failed?)'],
+  [16, 'MediaUnformatted', 'Disk is not formatted'],
+  [32, 'DroppingFrames', 'Dropping frames (disk too slow?)'],
+  [32768, 'Unknown', 'Unknown recording error'],
+]
+const DISK_STATUS = { 1: 'idle', 2: 'unformatted', 4: 'active', 8: 'recording', 32: 'removed' }
+const AUDIO_NAMES = { 1: 'HDMI 1', 2: 'HDMI 2', 3: 'HDMI 3', 4: 'HDMI 4', 1301: 'Mic 1', 1302: 'Mic 2' }
+
+// ---------- Settings ----------
+const DEFAULT_SETTINGS = {
+  ip: '192.168.0.40',
+  alwaysOnTop: false,
+  bounds: { width: 900, height: 900 },
+  lowDiskWarnMinutes: 30,
+  silenceWarnSeconds: 20,
+  silenceThresholdDb: -50,
+  volume: 0.6,
+  cursorCheck: true, // warn when the mouse leaves this window during an interview
+  cursorBeep: false, // ...and beep
+  cursorGraceSeconds: 3,
+  audioMeters: true, // off = ATEM stops sending audio levels (lowest CPU)
+  logRetentionDays: 90, // daily logs (atem-alert-YYYY-MM-DD.log) older than this are deleted
+  sessionRetentionDays: 365, // session files (logs/sessions/*.txt) older than this are deleted
+}
+const settingsFile = () => path.join(app.getPath('userData'), 'settings.json')
+let settings = { ...DEFAULT_SETTINGS }
+function loadSettings() {
+  try {
+    settings = { ...DEFAULT_SETTINGS, ...JSON.parse(fs.readFileSync(settingsFile(), 'utf8')) }
+  } catch {
+    settings = { ...DEFAULT_SETTINGS }
+  }
+}
+function saveSettings() {
+  try {
+    fs.writeFileSync(settingsFile(), JSON.stringify(settings, null, 2))
+  } catch (e) {
+    log('ERROR', 'Could not save settings: ' + e.message)
+  }
+}
+
+// ---------- Event log (our own "crash log") ----------
+const logDir = () => path.join(app.getPath('userData'), 'logs')
+const pad = (n, w = 2) => String(n).padStart(w, '0')
+// Local date/time with UTC offset, e.g. 2026-11-26 10:19:39.123 +01:00
+function localStamp(d = new Date()) {
+  const off = -d.getTimezoneOffset()
+  const tz = (off >= 0 ? '+' : '-') + pad(Math.floor(Math.abs(off) / 60)) + ':' + pad(Math.abs(off) % 60)
+  return `${localDate(d)} ${localTime(d)}.${pad(d.getMilliseconds(), 3)} ${tz}`
+}
+const localDate = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+const localTime = (d = new Date()) => `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+function log(level, msg, data) {
+  const now = new Date()
+  const line =
+    `${localStamp(now)} [${level}] ${msg}` +
+    (data ? ' ' + JSON.stringify(data, (k, v) => (typeof v === 'bigint' ? v.toString() : v)) : '')
+  console.log(line)
+  try {
+    fs.mkdirSync(logDir(), { recursive: true })
+    const day = localDate(now)
+    fs.appendFileSync(path.join(logDir(), `atem-alert-${day}.log`), line + '\n')
+  } catch {
+    /* ignore */
+  }
+  send('log', { time: now.getTime(), level, msg })
+}
+
+// ---------- Session file: one readable file per recording, for editing later ----------
+// e.g. logs/sessions/2026-11-26 10-15-02 Test 1.txt
+let sessionFile = null
+function startSession(title) {
+  const d = new Date()
+  const safe = String(st.rec.filename || 'recording').replace(/[^\w\- ]+/g, '_').slice(0, 60)
+  const dir = path.join(logDir(), 'sessions')
+  try {
+    fs.mkdirSync(dir, { recursive: true })
+    sessionFile = path.join(dir, `${localDate(d)} ${localTime(d).replace(/:/g, '-')} ${safe}.txt`)
+    fs.appendFileSync(
+      sessionFile,
+      `ATEM session log - ${title}\nDate: ${localDate(d)}   ATEM file name: ${st.rec.filename || '?'}\n` +
+        `Columns: computer clock | position in recording file | ATEM timecode (as in the recorded files) | event\n\n`
+    )
+  } catch (e) {
+    log('ERROR', 'Could not create session file: ' + e.message)
+    sessionFile = null
+  }
+}
+function sessionWrite(event, atStop = false) {
+  if (!sessionFile) startSession('started without recording')
+  const rt = recTimeNow(atStop)
+  const recCol = rt ? (rt.approx ? '~' : ' ') + fmtDur(rt.sec) : '   (not rec)'
+  const tc = atemTcNow() || '--:--:--:--'
+  try {
+    fs.appendFileSync(sessionFile, `${localTime()}  ${recCol.padEnd(10)}  ${tc}  ${event}\n`)
+  } catch {}
+}
+// ---------- ATEM timecode ----------
+// The ATEM sends its clock ("Time" command). In time-of-day mode this is the same timecode that is
+// written into the recorded files, so it matches the timeline in DaVinci Resolve.
+let lastTc = null // { h, m, s, f, at }
+let maxFrameSeen = 0
+function onAtemTime(p) {
+  lastTc = { h: p.hour, m: p.minute, s: p.second, f: p.frame, at: Date.now() }
+  if (p.frame > maxFrameSeen) maxFrameSeen = p.frame
+}
+function tcFps() {
+  // estimate frame rate from the highest frame number seen
+  for (const fps of [24, 25, 30, 50, 60]) if (maxFrameSeen < fps) return fps
+  return 60
+}
+// Current ATEM timecode as "HH:MM:SS:FF" (extrapolated from the last message), or null if unknown
+function atemTcNow() {
+  if (!lastTc || st.connection !== 'connected' || Date.now() - lastTc.at > 5000) return null
+  const fps = tcFps()
+  const day = 24 * 3600 * fps
+  let frames = ((lastTc.h * 60 + lastTc.m) * 60 + lastTc.s) * fps + lastTc.f
+  frames = (frames + Math.round(((Date.now() - lastTc.at) / 1000) * fps)) % day
+  const f = frames % fps, tsec = Math.floor(frames / fps)
+  return `${pad(Math.floor(tsec / 3600))}:${pad(Math.floor(tsec / 60) % 60)}:${pad(tsec % 60)}:${pad(f)}`
+}
+
+// Current position in the recording: ATEM's own duration if it sends one, else our stopwatch
+function recTimeNow(atStop = false) {
+  if ((!atStop && st.rec.state !== 'recording') || !st.recStartedAt) return null
+  const atemSec = st.rec.durationSec
+  if (atemSec && atemSec > 0) return { sec: atemSec, approx: false }
+  return { sec: (Date.now() - st.recStartedAt) / 1000, approx: !st.recStartExact }
+}
+
+// ---------- Cleanup of old files ----------
+// Deletes only files this app creates: logs/atem-alert-YYYY-MM-DD.log and logs/sessions/*.txt
+function cleanupOldFiles() {
+  const DAY = 24 * 3600 * 1000
+  const removed = []
+  const sweep = (dir, pattern, maxAgeDays, ageOf) => {
+    if (!(maxAgeDays > 0)) return // 0 or missing = keep forever
+    let names = []
+    try {
+      names = fs.readdirSync(dir)
+    } catch {
+      return
+    }
+    for (const name of names) {
+      if (!pattern.test(name)) continue
+      const file = path.join(dir, name)
+      try {
+        if (Date.now() - ageOf(name, file) > maxAgeDays * DAY) {
+          fs.unlinkSync(file)
+          removed.push(name)
+        }
+      } catch {}
+    }
+  }
+  // daily logs: age from the date in the file name (the log of today is never touched)
+  sweep(logDir(), /^atem-alert-\d{4}-\d{2}-\d{2}\.log$/, settings.logRetentionDays, (name) => {
+    const [y, m, d] = name.slice(11, 21).split('-').map(Number)
+    return new Date(y, m - 1, d + 1).getTime() // end of that day
+  })
+  // session files: age from last modification
+  sweep(path.join(logDir(), 'sessions'), /\.txt$/, settings.sessionRetentionDays, (_n, file) => fs.statSync(file).mtimeMs)
+  if (removed.length) log('APP', `Cleanup: deleted ${removed.length} old file(s)`, { files: removed })
+}
+
+// ---------- App state ----------
+let win = null
+let atem = null
+const st = {
+  connection: 'connecting', // connecting | connected | disconnected
+  model: '',
+  rec: { state: 'unknown', errorRaw: REC_ERROR_NONE, errors: [], durationSec: null, timeAvailableSec: null, disks: [] },
+  recStartedAt: null, // local timestamp when recording started (fallback timer)
+  recStartExact: false, // false if we connected while it was already recording (start time unknown)
+  // interview timer: state none | running | ended
+  interview: { state: 'none', startedAt: null, endedAt: null, startRec: null, marks: 0, lastMark: null },
+  alarm: null, // { level: 'red', kind, title, detail, time } - stays until acknowledged / recording restarts
+  warnings: [], // [{ id, text }]
+  cursorOutside: false, // mouse has been outside this window for longer than the grace time (during interview)
+}
+let cursorOutsideSince = null
+let lastDurationValue = null
+let lastDurationChangeAt = null
+let lastLoudAudioAt = Date.now()
+let levelsBuffer = {} // key -> { l, r, lp, rp } in dB
+let audioChannels = [] // which inputs are enabled in the mixer
+
+function send(channel, payload) {
+  if (win && !win.isDestroyed()) win.webContents.send(channel, payload)
+}
+function publish() {
+  send('state', { ...st, ip: settings.ip, settings, now: Date.now() })
+}
+function fireEvent(type, extra) {
+  send('event', { type, ...extra })
+}
+
+function tcToSec(tc) {
+  if (!tc) return null
+  return tc.hours * 3600 + tc.minutes * 60 + tc.seconds
+}
+function fmtDur(sec) {
+  if (sec == null) return '--:--:--'
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.floor(sec % 60)
+  return [h, m, s].map((x) => String(x).padStart(2, '0')).join(':')
+}
+function decodeErrors(raw) {
+  if (raw === REC_ERROR_NONE || raw == null) return []
+  if (raw === 0) return [{ name: 'NoMedia', text: 'No disk / no media' }]
+  const out = REC_ERRORS.filter(([bit]) => (raw & bit) === bit).map(([, name, text]) => ({ name, text }))
+  if (!out.length) out.push({ name: 'Raw' + raw, text: `Unrecognised error code ${raw}` })
+  return out
+}
+
+// Read everything we care about from the library state into st.rec
+function readRecording() {
+  const r = atem.state?.recording
+  if (!r) return
+  const disks = Object.values(r.disks || {})
+    .filter(Boolean)
+    .map((d) => ({ id: d.diskId, name: d.volumeName, timeAvailableSec: d.recordingTimeAvailable, status: DISK_STATUS[d.status] || String(d.status) }))
+  st.rec = {
+    state: r.status ? REC_STATE[r.status.state] || 'unknown(' + r.status.state + ')' : 'unknown',
+    errorRaw: r.status ? r.status.error : REC_ERROR_NONE,
+    errors: decodeErrors(r.status ? r.status.error : REC_ERROR_NONE),
+    durationSec: tcToSec(r.duration),
+    timeAvailableSec: r.status ? r.status.recordingTimeAvailable : null,
+    disks,
+    filename: r.properties?.filename,
+  }
+}
+
+function readAudioChannels() {
+  const inputs = atem.state?.fairlight?.inputs || {}
+  const list = []
+  for (const [id, input] of Object.entries(inputs)) {
+    if (!input) continue
+    for (const [src, s] of Object.entries(input.sources || {})) {
+      const mix = s?.properties?.mixOption // 1 off, 2 on, 4 AFV
+      list.push({ key: `${id}:${src}`, name: AUDIO_NAMES[id] || `Input ${id}`, enabled: mix !== 1 })
+    }
+  }
+  list.push({ key: 'master', name: 'MASTER', enabled: true, master: true })
+  audioChannels = list
+  send('audioChannels', audioChannels)
+}
+
+// ---------- Recording transition logic ----------
+let prevRecState = null
+function onRecordingChanged(reason) {
+  const before = { state: prevRecState, errors: st.rec.errors.map((e) => e.name) }
+  readRecording()
+  const now = st.rec.state
+  if (now !== prevRecState || reason === 'errors') {
+    log('REC', `Recording state ${prevRecState} -> ${now}`, {
+      error: st.rec.errorRaw,
+      errors: st.rec.errors.map((e) => e.name),
+      duration: fmtDur(st.rec.durationSec),
+      timeAvailableSec: st.rec.timeAvailableSec,
+      disks: st.rec.disks,
+    })
+  }
+
+  const wasRecording = prevRecState === 'recording'
+  if (now === 'recording' && prevRecState !== 'recording') {
+    const realStart = prevRecState === 'idle' || prevRecState === 'stopping'
+    if (realStart) {
+      st.recStartedAt = Date.now()
+      st.recStartExact = true
+      startSession('recording ' + (st.rec.filename || ''))
+      sessionWrite('RECORDING STARTED')
+      // A finished interview from before is cleared, so the bar starts fresh.
+      // A RUNNING interview is kept (e.g. recording restarted after an unexpected stop).
+      if (st.interview.state === 'ended') {
+        // keep the finished interview as "previous" for an hour, so it can be resumed
+        const prev = Date.now() - st.interview.endedAt < 60 * 60 * 1000 ? { ...st.interview } : null
+        st.interview = { state: 'none', startedAt: null, endedAt: null, startRec: null, marks: 0, lastMark: null, previous: prev }
+        saveInterview()
+      } else if (st.interview.state === 'running') {
+        sessionWrite(`INTERVIEW STILL RUNNING from previous recording (interview time ${fmtDur((Date.now() - st.interview.startedAt) / 1000)})`)
+      }
+    } else if (!st.recStartedAt) {
+      // app (re)connected while ATEM was already recording: start time unknown
+      st.recStartedAt = Date.now()
+      st.recStartExact = false
+      if (!sessionFile) startSession('app connected while already recording - times are approximate')
+      sessionWrite('App connected, ATEM already recording')
+    }
+    lastDurationValue = null
+    lastDurationChangeAt = Date.now()
+    lastLoudAudioAt = Date.now()
+    // Beep only for a real start; not when we just (re)connected and it was already recording
+    if (prevRecState === 'idle' || prevRecState === 'stopping') fireEvent('rec-start')
+    st.alarm = null
+  } else if (wasRecording && now !== 'recording') {
+    handleStop(before)
+  }
+  prevRecState = now
+  updateWarnings()
+  publish()
+}
+
+function handleStop(before) {
+  const recordedFor = st.recStartedAt ? fmtDur((Date.now() - st.recStartedAt) / 1000) : '?'
+  const iv = st.interview.state === 'running' ? ` · INTERVIEW WAS RUNNING (${fmtDur((Date.now() - st.interview.startedAt) / 1000)})` : ''
+  const reasons = []
+  for (const e of st.rec.errors) reasons.push(e.text)
+  for (const d of st.rec.disks) if (d.status === 'removed') reasons.push(`Disk "${d.name}" was removed`)
+  if (!st.rec.disks.length) reasons.push('No recording disk present')
+  if (st.rec.timeAvailableSec != null && st.rec.timeAvailableSec < 60) reasons.push('Disk has no recording time left')
+
+  if (reasons.length) {
+    st.alarm = {
+      level: 'red',
+      kind: 'unexpected',
+      title: 'UNEXPECTED RECORDING STOP!',
+      detail: reasons.join(' · ') + ` · recorded ${recordedFor}` + iv,
+      time: Date.now(),
+    }
+    log('ALARM', 'Unexpected recording stop', { reasons, recordedFor, before })
+    sessionWrite(`RECORDING STOPPED UNEXPECTEDLY: ${reasons.join('; ')} (recorded ${recordedFor})`, true)
+    fireEvent('rec-stop-unexpected')
+  } else {
+    st.alarm = {
+      level: 'red',
+      kind: 'stopped',
+      title: 'RECORDING STOPPED',
+      detail: `ATEM reported no error · recorded ${recordedFor}${iv}. If you did not press Stop - check the ATEM!`,
+      time: Date.now(),
+    }
+    log('ALARM', 'Recording stopped (no error reported by ATEM)', { recordedFor, before })
+    sessionWrite(`RECORDING STOPPED (no error reported by ATEM, recorded ${recordedFor})`, true)
+    fireEvent('rec-stop')
+  }
+  // Interview time only counts while recording: a running interview ends with the recording.
+  // It can be continued in the next recording with "Resume previous".
+  if (st.interview.state === 'running') {
+    const now = Date.now()
+    st.interview.state = 'ended'
+    st.interview.endedAt = now
+    st.interview.autoEnded = true
+    st.interview.endTc = atemTcNow()
+    const len = fmtDur((now - st.interview.startedAt) / 1000)
+    log('INTERVIEW', 'Interview ended because recording stopped, length ' + len)
+    sessionWrite(`INTERVIEW ENDED because recording stopped, length ${len}`, true)
+    saveInterview()
+  }
+  st.recStartedAt = null
+}
+
+// ---------- Yellow warnings ----------
+function updateWarnings() {
+  const w = []
+  if (st.connection !== 'connected') {
+    w.push({ id: 'conn', text: `Not connected to ATEM at ${settings.ip}` })
+  } else {
+    const recording = st.rec.state === 'recording'
+    const mins = st.rec.timeAvailableSec != null ? st.rec.timeAvailableSec / 60 : null
+    if (!st.rec.disks.length) w.push({ id: 'nodisk', text: 'No recording disk connected to ATEM' })
+    for (const d of st.rec.disks) {
+      if (d.status === 'unformatted') w.push({ id: 'unf' + d.id, text: `Disk "${d.name}" is not formatted` })
+      if (d.status === 'removed') w.push({ id: 'rem' + d.id, text: `Disk "${d.name}" removed` })
+    }
+    if (mins != null && st.rec.disks.length && mins < settings.lowDiskWarnMinutes)
+      w.push({ id: 'lowdisk', text: `Low disk space: only ${Math.floor(mins)} min of recording left` })
+    if (recording) {
+      for (const e of st.rec.errors) w.push({ id: 'err' + e.name, text: 'ATEM reports: ' + e.text })
+      if (lastDurationChangeAt && Date.now() - lastDurationChangeAt > 10000 && lastDurationValue != null)
+        w.push({ id: 'stuck', text: 'Recording timer on ATEM is not advancing!' })
+      const silentFor = (Date.now() - lastLoudAudioAt) / 1000
+      if (settings.audioMeters && silentFor > settings.silenceWarnSeconds)
+        w.push({ id: 'silence', text: `No audio on MASTER for ${Math.floor(silentFor)} s` })
+    }
+  }
+  const oldIds = new Set(st.warnings.map((x) => x.id))
+  const newOnes = w.filter((x) => !oldIds.has(x.id))
+  st.warnings = w
+  for (const n of newOnes) log('WARN', n.text)
+  // Don't beep for the "not connected" warning at startup; connection loss has its own sound.
+  if (newOnes.some((n) => n.id !== 'conn')) fireEvent('warning')
+}
+
+// ---------- ATEM connection ----------
+function connectAtem() {
+  if (atem) {
+    try {
+      atem.removeAllListeners()
+      atem.disconnect().catch(() => {})
+      atem.destroy?.().catch?.(() => {})
+    } catch {}
+  }
+  st.connection = 'connecting'
+  prevRecState = null
+  publish()
+  atem = new Atem({ disableMultithreaded: true })
+  atem.on('error', (e) => log('ERROR', 'ATEM library error: ' + e))
+
+  atem.on('connected', async () => {
+    st.connection = 'connected'
+    st.model = atem.state?.info?.productIdentifier || 'ATEM'
+    log('CONN', `Connected to ${st.model} at ${settings.ip}`)
+    if (st.alarm && st.alarm.kind === 'connlost') {
+      // Connection is back - recording state will tell whether it is still recording.
+      st.alarm.detail += ' · connection restored ' + localTime()
+    }
+    readAudioChannels()
+    try {
+      if (settings.audioMeters) await atem.startFairlightMixerSendLevels()
+    } catch (e) {
+      log('ERROR', 'Could not start audio levels: ' + e.message)
+    }
+    const wasConnLostWhileRecording = st.alarm && st.alarm.kind === 'connlost'
+    onRecordingChanged('connected')
+    if (wasConnLostWhileRecording && st.rec.state === 'recording') {
+      // still recording after reconnect: downgrade the alarm
+      st.alarm = null
+      fireEvent('conn-restored')
+      publish()
+    }
+  })
+
+  atem.on('disconnected', () => {
+    const wasRecording = st.rec.state === 'recording'
+    st.connection = 'disconnected'
+    log('CONN', `Disconnected from ATEM (was ${st.rec.state})`)
+    if (wasRecording) {
+      st.alarm = {
+        level: 'red',
+        kind: 'connlost',
+        title: 'LOST CONNECTION TO ATEM',
+        detail: 'Was recording when connection dropped - check the ATEM (power? network? crashed?)',
+        time: Date.now(),
+      }
+      sessionWrite('LOST CONNECTION TO ATEM while recording', true)
+      fireEvent('conn-lost')
+    }
+    st.rec.state = 'unknown'
+    prevRecState = 'unknown'
+    updateWarnings()
+    publish()
+  })
+
+  atem.on('stateChanged', (state, paths) => {
+    if (paths.some((p) => p.startsWith('recording'))) {
+      const errBefore = st.rec.errorRaw
+      if (paths.some((p) => p.startsWith('recording.duration'))) {
+        const d = tcToSec(state.recording?.duration)
+        if (d !== lastDurationValue) {
+          lastDurationValue = d
+          lastDurationChangeAt = Date.now()
+        }
+      }
+      const newErr = state.recording?.status?.error
+      onRecordingChanged(newErr !== errBefore ? 'errors' : 'state')
+    }
+    if (paths.some((p) => p.startsWith('fairlight.inputs'))) readAudioChannels()
+  })
+
+  atem.on('receivedCommands', (cmds) => {
+    for (const c of cmds) if (c.constructor.rawName === 'Time') onAtemTime(c.properties)
+  })
+
+  atem.on('levelChanged', (l) => {
+    const key = l.type === 'master' ? 'master' : `${l.index}:${l.source}`
+    const v = l.levels
+    const entry = { l: v.leftLevel / 100, r: v.rightLevel / 100, lp: v.leftPeak / 100, rp: v.rightPeak / 100 }
+    levelsBuffer[key] = entry
+    if (l.type === 'master' && Math.max(entry.l, entry.r) > settings.silenceThresholdDb) lastLoudAudioAt = Date.now()
+  })
+
+  log('CONN', `Connecting to ATEM at ${settings.ip} ...`)
+  atem.connect(settings.ip).catch((e) => log('ERROR', 'Connect failed: ' + e.message))
+}
+
+// Cursor check: during an interview the mouse should rest on this app, not on the cameras / shared screen
+function checkCursor() {
+  let outside = false
+  if (settings.cursorCheck && st.interview.state === 'running' && win && !win.isDestroyed() && win.isVisible() && !win.isMinimized()) {
+    const p = screen.getCursorScreenPoint()
+    const b = win.getBounds()
+    const inside = p.x >= b.x && p.x < b.x + b.width && p.y >= b.y && p.y < b.y + b.height
+    if (inside) cursorOutsideSince = null
+    else if (!cursorOutsideSince) cursorOutsideSince = Date.now()
+    outside = !!cursorOutsideSince && Date.now() - cursorOutsideSince > settings.cursorGraceSeconds * 1000
+  } else {
+    cursorOutsideSince = null
+  }
+  if (outside !== st.cursorOutside) {
+    st.cursorOutside = outside
+    log('CURSOR', outside ? 'Mouse cursor left the app window during interview' : 'Cursor warning cleared')
+    if (outside) {
+      sessionWrite('cursor left the app window (may be visible in recording)')
+      if (settings.cursorBeep) fireEvent('cursor')
+    }
+    publish()
+  }
+}
+
+// Periodic jobs
+function startTimers() {
+  setInterval(checkCursor, 1000) // once per second is plenty; reading the cursor position is very cheap
+  // audio levels -> UI (latest value per channel)
+  setInterval(() => {
+    if (Object.keys(levelsBuffer).length) {
+      send('levels', levelsBuffer)
+      levelsBuffer = {}
+    }
+  }, 100) // audio levels -> UI 10x per second
+  // ask ATEM for duration while recording, re-evaluate warnings, publish clock
+  setInterval(() => {
+    if (atem && st.connection === 'connected') {
+      atem.requestTime().catch(() => {}) // keep the timecode fresh
+      if (st.rec.state === 'recording') atem.requestRecordingDuration().catch(() => {})
+    }
+    const before = JSON.stringify(st.warnings)
+    updateWarnings()
+    if (JSON.stringify(st.warnings) !== before || st.rec.state === 'recording') publish()
+  }, 1000)
+  // heartbeat to the log while recording (helps reconstructing what happened)
+  setInterval(() => {
+    if (st.rec.state === 'recording')
+      log('BEAT', 'Recording', {
+        atemDuration: fmtDur(st.rec.durationSec),
+        localDuration: st.recStartedAt ? fmtDur((Date.now() - st.recStartedAt) / 1000) : null,
+        timeAvailableSec: st.rec.timeAvailableSec,
+        error: st.rec.errorRaw,
+        disks: st.rec.disks,
+      })
+  }, 60000)
+}
+
+// ---------- Window ----------
+function createWindow() {
+  const devSize = process.env.ATEM_ALERT_SIZE && process.env.ATEM_ALERT_SIZE.split('x').map(Number)
+  win = new BrowserWindow({
+    ...(devSize ? { width: devSize[0], height: devSize[1] } : settings.bounds),
+    minWidth: 260,
+    minHeight: 200,
+    title: 'ATEM Recording Alert',
+    backgroundColor: '#111111',
+    alwaysOnTop: settings.alwaysOnTop,
+    acceptFirstMouse: true, // macOS: a click on the inactive window presses the button right away
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      backgroundThrottling: false, // keep timers/sounds running when window is not focused
+      autoplayPolicy: 'no-user-gesture-required',
+    },
+  })
+  win.setMenuBarVisibility(false)
+  win.loadFile(path.join(__dirname, 'renderer', 'index.html'))
+  const saveBounds = () => {
+    if (!win.isDestroyed() && !win.isMinimized()) {
+      settings.bounds = win.getBounds()
+      saveSettings()
+    }
+  }
+  if (!devSize) {
+    win.on('resized', saveBounds)
+    win.on('moved', saveBounds)
+  }
+  win.webContents.on('did-finish-load', () => {
+    send('audioChannels', audioChannels)
+    publish()
+  })
+}
+
+// ---------- IPC from UI ----------
+ipcMain.on('ack', () => {
+  if (st.alarm) log('ACK', 'Alarm acknowledged: ' + st.alarm.title)
+  st.alarm = null
+  publish()
+})
+ipcMain.on('setIp', (_e, ip) => {
+  ip = String(ip || '').trim()
+  if (!/^[0-9a-zA-Z.\-]+$/.test(ip)) return
+  settings.ip = ip
+  saveSettings()
+  connectAtem()
+})
+ipcMain.on('setAlwaysOnTop', (_e, v) => {
+  settings.alwaysOnTop = !!v
+  saveSettings()
+  if (win) win.setAlwaysOnTop(settings.alwaysOnTop)
+  publish()
+})
+ipcMain.on('setVolume', (_e, v) => {
+  settings.volume = Math.max(0, Math.min(1, Number(v) || 0))
+  saveSettings()
+  publish()
+})
+ipcMain.on('setCursorOptions', (_e, o) => {
+  if (typeof o.check === 'boolean') settings.cursorCheck = o.check
+  if (typeof o.beep === 'boolean') settings.cursorBeep = o.beep
+  saveSettings()
+  checkCursor()
+  publish()
+})
+ipcMain.on('setAudioMeters', async (_e, on) => {
+  settings.audioMeters = !!on
+  saveSettings()
+  lastLoudAudioAt = Date.now()
+  if (atem && st.connection === 'connected') {
+    try {
+      if (on) await atem.startFairlightMixerSendLevels()
+      else await atem.stopFairlightMixerSendLevels()
+    } catch (e) {
+      log('ERROR', 'Audio meters toggle failed: ' + e.message)
+    }
+  }
+  log('APP', 'Audio meters ' + (on ? 'on' : 'off'))
+  publish()
+})
+ipcMain.on('openLogs', () => {
+  fs.mkdirSync(logDir(), { recursive: true })
+  shell.openPath(logDir())
+})
+// Interview timer + markers (buttons in the UI)
+function saveInterview() {
+  settings.interview = st.interview // survives an app restart/crash
+  saveSettings()
+}
+ipcMain.on('interview', (_e, action) => {
+  const iv = st.interview
+  const now = Date.now()
+  if (action === 'start') {
+    // Only while recording - the greyed-out button is also a reminder to start recording
+    if (st.rec.state !== 'recording') return
+    const rt = recTimeNow()
+    const tc = atemTcNow()
+    st.interview = { state: 'running', startedAt: now, endedAt: null, startRec: rt ? rt.sec : null, startTc: tc, marks: 0, lastMark: null }
+    log('INTERVIEW', 'Interview started', { recordingTime: rt ? fmtDur(rt.sec) : null, timecode: tc })
+    sessionWrite('INTERVIEW START')
+    fireEvent('iv-start')
+  } else if (action === 'end' && iv.state === 'running') {
+    iv.state = 'ended'
+    iv.endedAt = now
+    iv.endTc = atemTcNow()
+    const len = fmtDur((now - iv.startedAt) / 1000)
+    log('INTERVIEW', 'Interview ended, length ' + len, { timecode: iv.endTc })
+    sessionWrite(`INTERVIEW END   length ${len}` + (iv.marks ? `, ${iv.marks} mark(s)` : ''))
+    fireEvent('iv-end')
+  } else if (action === 'mark') {
+    iv.marks += 1
+    const rt = recTimeNow()
+    iv.lastMark = { n: iv.marks, time: now, rec: rt ? rt.sec : null, tc: atemTcNow() }
+    log('INTERVIEW', 'Mark ' + iv.marks, { recordingTime: rt ? fmtDur(rt.sec) : null, timecode: iv.lastMark.tc })
+    sessionWrite(`MARK ${iv.marks}` + (iv.state === 'running' ? `   (interview time ${fmtDur((now - iv.startedAt) / 1000)})` : ''))
+    fireEvent('iv-mark')
+  } else if (action === 'resume' && iv.state === 'ended' && st.rec.state === 'recording') {
+    // undo an accidental End: continue the same interview
+    iv.state = 'running'
+    iv.endedAt = null
+    iv.autoEnded = false
+    log('INTERVIEW', 'Interview resumed')
+    sessionWrite('INTERVIEW RESUMED (End was undone)')
+    fireEvent('iv-start')
+  } else if (action === 'resumePrevious' && iv.state === 'none' && iv.previous && st.rec.state === 'recording') {
+    // continue the timer from where the previous interview ended (the gap between recordings is not counted)
+    const p = iv.previous
+    const gap = now - p.endedAt
+    st.interview = {
+      ...p, state: 'running', endedAt: null, previous: null, autoEnded: false,
+      firstStartedAt: p.firstStartedAt || p.startedAt,
+      startedAt: p.startedAt + gap, // shift so the timer continues at the old length
+      resumedAt: now, startRec: null, startTc: null,
+    }
+    log('INTERVIEW', 'Previous interview resumed in new recording', { pausedFor: fmtDur(gap / 1000) })
+    sessionWrite(`INTERVIEW RESUMED from previous recording (interview time ${fmtDur((now - st.interview.startedAt) / 1000)})`)
+    fireEvent('iv-start')
+  } else if (action === 'clear') {
+    st.interview = { state: 'none', startedAt: null, endedAt: null, startRec: null, marks: 0, lastMark: null }
+  }
+  saveInterview()
+  publish()
+})
+ipcMain.on('openSessions', () => {
+  const dir = path.join(logDir(), 'sessions')
+  fs.mkdirSync(dir, { recursive: true })
+  shell.openPath(dir)
+})
+
+// Test mode: simulate events so alerts can be checked without breaking a real recording
+ipcMain.on('simulate', (_e, what) => {
+  log('TEST', 'Simulating: ' + what)
+  if (what === 'start') {
+    st.alarm = null
+    fireEvent('rec-start')
+  } else if (what === 'stop') {
+    st.alarm = { level: 'red', kind: 'stopped', title: 'RECORDING STOPPED', detail: '(TEST) ATEM reported no error', time: Date.now() }
+    fireEvent('rec-stop')
+  } else if (what === 'unexpected') {
+    st.alarm = { level: 'red', kind: 'unexpected', title: 'UNEXPECTED RECORDING STOP!', detail: '(TEST) Disk error (disk disconnected or failed?)', time: Date.now() }
+    fireEvent('rec-stop-unexpected')
+  } else if (what === 'warning') {
+    fireEvent('warning')
+  }
+  publish()
+})
+
+// ---------- Startup ----------
+// Dev helper: ATEM_ALERT_USERDATA=<folder> keeps test settings/logs away from the real ones
+if (process.env.ATEM_ALERT_USERDATA) app.setPath('userData', process.env.ATEM_ALERT_USERDATA)
+app.whenReady().then(() => {
+  loadSettings()
+  if (settings.interview && settings.interview.state) st.interview = settings.interview
+  // stop the OS from suspending us (timers, network) during long sessions
+  powerSaveBlocker.start('prevent-app-suspension')
+  createWindow()
+  connectAtem()
+  startTimers()
+  log('APP', `ATEM Recording Alert ${app.getVersion()} started. Logs: ${logDir()}`)
+  cleanupOldFiles()
+  setInterval(cleanupOldFiles, 24 * 3600 * 1000)
+})
+app.on('window-all-closed', () => {
+  log('APP', 'Closed')
+  app.quit()
+})
+
+// Dev helper: ATEM_ALERT_SNAPSHOT=/path/file.png saves a screenshot of the window after a few seconds
+if (process.env.ATEM_ALERT_SNAPSHOT) {
+  app.whenReady().then(() =>
+    setTimeout(async () => {
+      if (process.env.ATEM_ALERT_SIM) ipcMain.emit('simulate', {}, process.env.ATEM_ALERT_SIM)
+      for (const a of (process.env.ATEM_ALERT_IV || '').split(',').filter(Boolean)) {
+        ipcMain.emit('interview', {}, a)
+        await new Promise((r) => setTimeout(r, 1100))
+      }
+      await new Promise((r) => setTimeout(r, 600))
+      const img = await win.webContents.capturePage()
+      fs.writeFileSync(process.env.ATEM_ALERT_SNAPSHOT, img.toPNG())
+      if (process.env.ATEM_ALERT_SNAPSHOT_QUIT) app.quit()
+    }, Number(process.env.ATEM_ALERT_SNAPSHOT_DELAY || 5000))
+  )
+}

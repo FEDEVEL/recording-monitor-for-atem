@@ -1,0 +1,51 @@
+{
+  "name": "atem-recording-alert",
+  "version": "0.1.0",
+  "description": "Shows ATEM Mini recording status and audio levels, alerts when recording stops",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "probe": "node tools/probe.js",
+    "dist:win": "electron-builder --win portable nsis --x64",
+    "dist:mac": "electron-builder --mac dir"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "atem-connection": "3.11.1"
+  },
+  "devDependencies": {
+    "electron": "45.5.0",
+    "electron-builder": "26.18.0"
+  },
+  "productName": "ATEM Recording Alert",
+  "build": {
+    "appId": "com.local.atemrecordingalert",
+    "productName": "ATEM Recording Alert",
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "portable",
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "portable": {
+      "artifactName": "ATEM-Recording-Alert-${version}-portable.exe"
+    },
+    "directories": {
+      "output": "dist"
+    },
+    "npmRebuild": false
+  }
+}
