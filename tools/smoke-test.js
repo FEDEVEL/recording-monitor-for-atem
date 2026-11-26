@@ -95,7 +95,7 @@ class App {
   async start() {
     this.out = ''
     this.proc = spawn(ELECTRON, [`--remote-debugging-port=${PAGE_PORT}`, `--inspect=${MAIN_PORT}`, ROOT], {
-      env: { ...process.env, ATEM_ALERT_USERDATA: TMP, ATEM_ALERT_TEST_HOOKS: '1' },
+      env: { ...process.env, ATEM_ALERT_USERDATA: TMP, ATEM_ALERT_TEST_HOOKS: '1', ATEM_ALERT_BACKGROUND: '1' },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     this.proc.stdout.on('data', (d) => (this.out += d))
@@ -231,7 +231,7 @@ async function main() {
     check('Navigation to web pages is blocked', (await app.ev('location.href')).endsWith('renderer/index.html'), await app.ev('location.href'))
 
     section('Single instance')
-    const second = spawn(ELECTRON, [ROOT], { env: { ...process.env, ATEM_ALERT_USERDATA: TMP }, stdio: 'ignore' })
+    const second = spawn(ELECTRON, [ROOT], { env: { ...process.env, ATEM_ALERT_USERDATA: TMP, ATEM_ALERT_BACKGROUND: '1' }, stdio: 'ignore' })
     const secondExited = await new Promise((r) => {
       const t = setTimeout(() => r(false), 10000)
       second.on('exit', () => (clearTimeout(t), r(true)))

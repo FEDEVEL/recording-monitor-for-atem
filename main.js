@@ -738,7 +738,7 @@ function onDisplaysChanged() {
 
 // Bring the window to the user's attention on an alarm (without stealing keyboard focus from Zoom)
 function demandAttention() {
-  if (!win || win.isDestroyed()) return
+  if (!win || win.isDestroyed() || process.env.ATEM_ALERT_BACKGROUND) return
   if (win.isMinimized()) win.restore()
   if (!win.isVisible()) win.showInactive()
   win.moveTop()
@@ -753,6 +753,8 @@ function createWindow() {
   win = new BrowserWindow({
     ...(devSize ? { width: devSize[0], height: devSize[1] } : savedBounds() || { width: 900, height: 900 }),
     icon: path.join(__dirname, 'build', 'icon.png'),
+    // Tests (ATEM_ALERT_BACKGROUND=1): open without taking focus, so the developer's screen isn't switched
+    show: !process.env.ATEM_ALERT_BACKGROUND,
     minWidth: 260,
     minHeight: 200,
     title: 'Recording Monitor for ATEM',
@@ -775,6 +777,7 @@ function createWindow() {
   win.webContents.on('will-navigate', (e) => e.preventDefault())
   session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(false))
 
+  if (process.env.ATEM_ALERT_BACKGROUND) win.once('ready-to-show', () => win.showInactive())
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'))
   if (!devSize) {
     win.on('resized', rememberBounds)
@@ -1101,11 +1104,14 @@ app.on('child-process-gone', (_e, d) => log('ERROR', `Helper process gone: ${d.t
 const isFirstInstance = app.requestSingleInstanceLock()
 if (!isFirstInstance) app.quit()
 app.on('second-instance', () => {
-  if (!win || win.isDestroyed()) return
+  if (!win || win.isDestroyed() || process.env.ATEM_ALERT_BACKGROUND) return
   if (win.isMinimized()) win.restore()
   win.show()
   win.focus()
 })
+
+// Tests: don't show a Dock icon / don't activate the app (keeps the developer's full-screen space)
+if (process.env.ATEM_ALERT_BACKGROUND && process.platform === 'darwin' && app.dock) app.dock.hide()
 
 if (isFirstInstance) app.whenReady().then(() => {
   loadSettings()
@@ -1115,7 +1121,7 @@ if (isFirstInstance) app.whenReady().then(() => {
   // stop the OS from suspending us (timers, network) during long sessions
   powerSaveBlocker.start('prevent-app-suspension')
   // macOS takes the Dock icon from the app bundle; when run with "npm start" that is Electron's own icon
-  if (process.platform === 'darwin' && app.dock) app.dock.setIcon(path.join(__dirname, 'build', 'icon.png'))
+  if (process.platform === 'darwin' && app.dock && !process.env.ATEM_ALERT_BACKGROUND) app.dock.setIcon(path.join(__dirname, 'build', 'icon.png'))
   createWindow()
   if (process.env.ATEM_ALERT_DEMO) setupDemo(process.env.ATEM_ALERT_DEMO)
   else connectAtem()
