@@ -230,8 +230,22 @@ npm run dist:win   # build the Windows portable .exe into dist/
 | `preload.js` | safe bridge between the window and the main process |
 | `renderer/` | user interface (`index.html`, `app.js`, `style.css`) and generated sounds (`sounds.js`) |
 | `tools/probe.js` | command-line diagnostic |
+| `tools/smoke-test.js` | automated release test against a real ATEM (`npm run smoke-test`) |
 | `tools/make-icon.js` | renders `build/icon.svg` to `build/icon.png` |
 | `docs/` | screenshots |
+
+### Smoke test (run before every release)
+An automated test drives the real app against a **real ATEM** and checks every main feature
+(about 50 checks: recording detection, alarms, interview timer, marks with timecode, warnings and Ignore,
+cursor check, short and long connection loss, session files, settings, crash recovery, CPU, security…):
+```bash
+npm run smoke-test                 # ATEM at 192.168.0.40
+npm run smoke-test -- 10.0.0.5     # another IP address
+```
+- It **refuses to run if the ATEM is recording** (or a recording is just starting), has no disk or < 10 min of disk time.
+- It makes **2 short test recordings** (~1 minute) on the ATEM disk; sounds are muted.
+- It uses its own temporary settings/log folder, so your real settings and logs are not touched.
+- Exit code 0 = all passed. At the end it lists what still has to be checked by hand on Windows.
 
 ### Maintenance
 Dependencies are pinned, so security fixes don't arrive automatically. Every few months:

@@ -534,17 +534,6 @@ function connectAtem() {
     if (l.type === 'master' && Math.max(entry.l, entry.r) > settings.silenceThresholdDb) lastLoudAudioAt = Date.now()
   })
 
-  // Dev helper: ATEM_ALERT_TEST_RESET=<after ms>:<offline ms> drops and restores the connection once (tests only)
-  const [resetAfter, offlineMs] = (process.env.ATEM_ALERT_TEST_RESET || '').split(':').map(Number)
-  if (resetAfter && !connectAtem.testDone) {
-    connectAtem.testDone = true
-    setTimeout(async () => {
-      log('TEST', `Simulating connection loss for ${offlineMs} ms`)
-      await atem.disconnect()
-      setTimeout(() => atem.connect(settings.ip), offlineMs)
-    }, resetAfter)
-  }
-
   log('CONN', `Connecting to ATEM at ${settings.ip} ...`)
   atem.connect(settings.ip).catch((e) => log('ERROR', 'Connect failed: ' + e.message))
 }
@@ -1139,6 +1128,31 @@ app.on('window-all-closed', () => {
   log('APP', 'Closed')
   app.quit()
 })
+
+// ---------- Test hooks (only for tools/smoke-test.js; they don't exist in normal use) ----------
+if (process.env.ATEM_ALERT_TEST_HOOKS === '1') {
+  global.__testHooks = {
+    state: () => JSON.parse(JSON.stringify({ ...st, settings }, (k, v) => (typeof v === 'bigint' ? v.toString() : v))),
+    sessionFile: () => sessionFile,
+    logDir: () => logDir(),
+    // drop the ATEM connection and reconnect after `ms` (simulates a network problem)
+    dropConnection: async (ms) => {
+      log('TEST', `Simulating connection loss for ${ms} ms`)
+      await atem.disconnect()
+      setTimeout(() => atem.connect(settings.ip), ms)
+    },
+    cursorPoint: () => screen.getCursorScreenPoint(),
+    displays: () => screen.getAllDisplays().map((d) => d.workArea),
+    winBounds: () => win.getBounds(),
+    setWinBounds: (b) => win.setBounds(b),
+    cpuPercent: () => app.getAppMetrics().reduce((sum, m) => sum + (m.cpu?.percentCPUUsage || 0), 0),
+    memoryMB: () => Math.round(app.getAppMetrics().reduce((sum, m) => sum + (m.memory?.workingSetSize || 0), 0) / 1024),
+    quit: () => {
+      quitConfirmed = true
+      app.quit()
+    },
+  }
+}
 
 // Dev helper: ATEM_ALERT_SNAPSHOT=/path/file.png saves a screenshot of the window after a few seconds
 if (process.env.ATEM_ALERT_SNAPSHOT && isFirstInstance) {

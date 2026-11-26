@@ -7,7 +7,8 @@
     "start": "electron .",
     "probe": "node tools/probe.js",
     "dist:win": "electron-builder --win portable nsis --x64",
-    "dist:mac": "electron-builder --mac dir"
+    "dist:mac": "electron-builder --mac dir",
+    "smoke-test": "node tools/smoke-test.js"
   },
   "keywords": [],
   "author": "FEDEVEL",

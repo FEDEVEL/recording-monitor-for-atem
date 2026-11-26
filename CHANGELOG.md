@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+### Added
+- Automated smoke test against a real ATEM (`npm run smoke-test`), ~50 checks, refuses to run while recording
+
 ### Fixed
 - Brief yellow "NO CONNECTION" flash when a recording starts: the ATEM sometimes resets its connection for a fraction of a second. Interruptions shorter than 2 s are now ignored (and logged); a real outage still raises the alarm after 2 s
 
