@@ -49,6 +49,12 @@ function render() {
     text = s.alarm.title
     sub = s.alarm.detail + ' · ' + clock(s.alarm.time)
     timer = recording ? fmt(dur) : ''
+  } else if (s.cursorOutside) {
+    // the whole status area flashes blue: hard to miss even from the corner of the eye
+    cls = 'st-cursor'
+    text = '🖱 MOVE CURSOR HERE'
+    sub = 'The mouse cursor is outside this window – it may be visible in the recording'
+    timer = recording ? fmt(dur) : ''
   } else if (s.connection !== 'connected') {
     cls = 'st-offline'
     text = s.connection === 'connecting' ? 'CONNECTING…' : 'NO CONNECTION'
@@ -74,7 +80,8 @@ function render() {
   setHidden('ackBtn', !s.alarm)
 
   renderInterview(s)
-  setHidden('cursorWarn', !s.cursorOutside)
+  const bodyCls = cls === 'st-rec' ? 'calm' : ''
+  if (document.body.className !== bodyCls) document.body.className = bodyCls
 
   // warnings (rebuilt only when the list changes)
   const ign = s.ignoredWarnings || []
@@ -119,6 +126,10 @@ function render() {
   if (document.activeElement !== $('ipInput')) setProp('ipInput', 'value', s.ip)
   setText('version', 'v' + s.version)
   setProp('onTop', 'checked', !!s.settings.alwaysOnTop)
+  setProp('beaconOn', 'checked', !!s.settings.beacon)
+  if (document.activeElement !== $('beaconSize')) setProp('beaconSize', 'value', String(s.settings.beaconSize))
+  setProp('beaconSize', 'disabled', !s.settings.beacon)
+  setProp('stopFrame', 'checked', !!s.settings.stopFrame)
   setProp('cursorCheck', 'checked', !!s.settings.cursorCheck)
   for (const el of document.querySelectorAll('[data-sound]')) el.checked = !!s.settings[el.dataset.sound]
   setProp('meterToggle', 'checked', s.settings.audioMeters !== false)
@@ -270,6 +281,9 @@ $('ackBtn').onclick = () => {
 }
 $('ipInput').onchange = (e) => api.setIp(e.target.value)
 $('onTop').onchange = (e) => api.setAlwaysOnTop(e.target.checked)
+$('beaconOn').onchange = (e) => api.setBeacon(e.target.checked)
+$('stopFrame').onchange = (e) => api.setStopFrame(e.target.checked)
+$('beaconSize').oninput = (e) => api.setBeaconSize(Number(e.target.value))
 $('cursorCheck').onchange = (e) => api.setCursorOptions({ check: e.target.checked })
 $('meterToggle').onchange = (e) => api.setAudioMeters(e.target.checked)
 for (const el of document.querySelectorAll('[data-sound]')) el.onchange = () => api.setSoundOption(el.dataset.sound, el.checked)

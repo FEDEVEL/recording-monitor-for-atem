@@ -93,6 +93,7 @@ class Cdp {
 // ---------- the app under test ----------
 class App {
   async start() {
+    this.allOut = (this.allOut || '') + (this.out || '')
     this.out = ''
     this.proc = spawn(ELECTRON, [`--remote-debugging-port=${PAGE_PORT}`, `--inspect=${MAIN_PORT}`, ROOT], {
       env: { ...process.env, ATEM_ALERT_USERDATA: TMP, ATEM_ALERT_TEST_HOOKS: '1', ATEM_ALERT_BACKGROUND: '1' },
@@ -260,7 +261,8 @@ async function main() {
     await app.clearSounds()
     await atem.startRecording()
     const recOn = await waitFor(async () => /st-rec/.test(await app.statusClass()), 8000)
-    check('Recording start detected (green RECORDING)', !!recOn, await app.text('statusText'))
+    check('Recording start detected (calm RECORDING with red ●)', !!recOn, await app.text('statusText'))
+    check('Beacon dot is open and steady red while recording', (await app.hook('beaconLevel()')) === 'rec' || (await app.hook('beaconLevel()')) === 'warning', await app.hook('beaconLevel()'))
     check('Recording start sound', (await app.sounds()).includes('start'))
     const t1 = toSec(await app.text('timer'))
     await sleep(3200)
@@ -298,7 +300,7 @@ async function main() {
     await app.ev("[...document.querySelectorAll('.warning')].find(w => w.textContent.includes('No audio')).querySelector('.ignoreBtn').click()")
     await sleep(500)
     const ignoredNote = await app.ev("[...document.querySelectorAll('.ignoredNote')].map(e => e.textContent).join(' | ')")
-    check('✕ Ignore turns the status green and shows a grey note', (await app.statusClass()) === 'st-rec' && /ignored: No audio/.test(ignoredNote), ignoredNote)
+    check('✕ Ignore turns the status back to calm and shows a grey note', (await app.statusClass()) === 'st-rec' && /ignored: No audio/.test(ignoredNote), ignoredNote)
     const back = await waitFor(() => app.ev("[...document.querySelectorAll('.warning span')].some(s => s.textContent.includes('No audio'))"), 7000)
     check('Ignored warning comes back when its time is up', !!back)
 
@@ -308,9 +310,12 @@ async function main() {
     // put the window on the half of the screen where the cursor is NOT
     const leftHalf = cur.x < area.x + area.width / 2
     await app.hook(`setWinBounds(${JSON.stringify({ x: leftHalf ? area.x + area.width - 620 : area.x + 20, y: area.y + 40, width: 600, height: 560 })})`)
-    const cursorWarn = await waitFor(() => app.visible('cursorWarn'), 5000)
-    if (cursorWarn) check('Cursor warning appears when the mouse is outside the window', true)
+    const cursorWarn = await waitFor(async () => (await app.statusClass()) === 'st-cursor', 5000)
+    if (cursorWarn) check('Cursor warning: status area flashes blue, beacon blue', (await app.hook('beaconLevel()')) === 'cursor')
     else warn('Cursor check', 'warning did not appear – was the mouse moved over the test window?')
+    // switch the cursor check off again: the flashing blue warning would hide the status the next checks look at
+    await app.ev('atemAlert.setCursorOptions({ check: false })')
+    await waitFor(async () => (await app.statusClass()) !== 'st-cursor', 3000)
 
     section('End / Resume (pause not counted)')
     await app.clearSounds()
@@ -340,6 +345,8 @@ async function main() {
     await atem.stopRecording()
     const stopped = await waitFor(async () => (await app.statusClass()) === 'st-alarm' && (await app.text('statusText')) === 'RECORDING STOPPED', 8000)
     check('Recording stop → red RECORDING STOPPED', !!stopped)
+    check('Screen frame shown on recording stop', (await app.hook('frameCount()')) > 0, (await app.hook('frameCount()')) + ' monitor(s)')
+    check('Beacon dot flashes (alarm)', (await app.hook('beaconLevel()')) === 'alarm')
     check('Recording stop sound', (await app.sounds()).includes('stop'))
     const ivInfo = await app.text('ivInfo')
     check('Running interview ended with the recording', (await app.visible('ivEnded')) && ivInfo.includes('because recording stopped'), ivInfo)
@@ -347,6 +354,7 @@ async function main() {
     await app.click('#ackBtn')
     await sleep(400)
     check('OK clears the alarm', (await app.statusClass()) === 'st-idle')
+    check('OK hides the screen frame', (await app.hook('frameCount()')) === 0)
     check('Resume / New disabled while not recording', await app.ev("document.getElementById('ivResume').disabled && document.getElementById('ivNew').disabled"))
     await sleep(2000)
 
@@ -441,6 +449,8 @@ async function main() {
     console.log('  (stopped a test recording that was still running)')
   }
   await atem.disconnect().catch(() => {})
+  // keep the app's own output for diagnosis (SMOKE_APP_LOG=<file>)
+  if (process.env.SMOKE_APP_LOG && app) try { fs.writeFileSync(process.env.SMOKE_APP_LOG, (app.allOut || '') + app.out) } catch {}
   try {
     fs.rmSync(TMP, { recursive: true, force: true })
   } catch {}

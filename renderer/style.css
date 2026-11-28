@@ -28,14 +28,23 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 #statusSub { font-size: clamp(11px, min(2vw, 2.6vh), 22px); opacity: 0.9; margin-top: 0.4em; max-width: 95%; }
 #dot { width: 0.55em; height: 0.55em; border-radius: 50%; background: currentColor; display: none; }
 
+/* Calm when everything is fine: nothing blinks or moves while recording normally (the eye notices any
+   movement in the corner of the view). Only problems blink: alarm (red), cursor (blue). */
 .st-idle { background: #2a2a2a; color: #bbb; }
 .st-offline { background: #3a3000; color: var(--yellow); }
-.st-rec { background: var(--green); color: #fff; }
-.st-rec #dot, .st-rec-warn #dot { display: inline-block; animation: blink 1s steps(1) infinite; background: #ff2020; }
-.st-rec-warn { background: var(--yellow); color: #111; }
+/* recording OK: dark and quiet, a steady red ● like a camera's REC light */
+.st-rec { background: #181818; color: #c8c8c8; }
+.st-rec #dot, .st-rec-warn #dot { display: inline-block; background: #e01b1b; }
+/* recording with a yellow warning: still calm, yellow text - the warning lines below say what's wrong */
+.st-rec-warn { background: #221d00; color: var(--yellow); }
+/* recording stopped / lost connection: flashing */
 .st-alarm { color: #fff; animation: alarm 0.8s steps(1) infinite; }
 @keyframes alarm { 0% { background: var(--red); } 50% { background: #500; } }
-@keyframes blink { 50% { opacity: 0.15; } }
+/* mouse cursor outside this window during an interview: flashing blue */
+.st-cursor { color: #fff; animation: cursorFlash 0.9s steps(1) infinite; }
+@keyframes cursorFlash { 0% { background: #2f7bff; } 50% { background: #0b2a66; } }
+/* while recording calmly, the moving meters are dimmed so they don't pull the eye */
+body.calm #meters { opacity: 0.45; }
 
 #ackBtn {
   margin-top: 0.6em; font-size: clamp(12px, min(2.4vw, 3vh), 26px); padding: 0.3em 1em;
@@ -45,7 +54,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 
 /* ---------- Interview bar ---------- */
 #interview { flex: 0 0 auto; background: #182433; padding: 0.5vh 2vw; border-top: 1px solid #000; }
-#interview.iv-running { background: #123a66; }
+#interview.iv-running { background: #152a44; }
 .ivRow { display: flex; align-items: center; justify-content: center; gap: 0.5em 1em; flex-wrap: wrap; }
 .ivLabel { font-size: clamp(11px, min(2.2vw, 2.8vh), 24px); font-weight: 700; color: #9cc3ff; letter-spacing: 0.05em; }
 .ivTime { font-size: clamp(18px, min(7vw, 9vh), 88px); font-weight: 700; font-variant-numeric: tabular-nums; color: #fff; line-height: 1.1; }
@@ -58,14 +67,6 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 #ivMark { background: #4a3a10; border-color: #b8902a; }
 #interview button:disabled { opacity: 0.45; cursor: not-allowed; background: #2a3442; border-color: #445; font-weight: 600; }
 #ivInfo { text-align: center; font-size: clamp(10px, min(1.6vw, 2.2vh), 15px); color: #9cb0cc; padding-bottom: 0.2em; }
-
-/* ---------- Cursor warning ---------- */
-#cursorWarn {
-  flex: 0 0 auto; text-align: center; font-weight: 800; color: #111;
-  font-size: clamp(12px, min(2.6vw, 3.4vh), 30px); padding: 0.3em 0.6em;
-  animation: cursorFlash 0.9s steps(1) infinite;
-}
-@keyframes cursorFlash { 0% { background: #ff8c00; } 50% { background: #ffc266; } }
 
 /* ---------- Warnings ---------- */
 #warnings { flex: 0 0 auto; }

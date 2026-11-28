@@ -4,6 +4,8 @@ const { app, BrowserWindow, ipcMain, shell, powerSaveBlocker, screen, dialog, se
 const path = require('path')
 const fs = require('fs')
 const { Atem } = require('atem-connection')
+const { createBeacon } = require('./beacon')
+const { createFrame } = require('./frame')
 
 // ---------- Constants (values from the ATEM protocol) ----------
 const REC_STATE = { 0: 'idle', 1: 'recording', 128: 'stopping' }
@@ -43,6 +45,9 @@ const DEFAULT_SETTINGS = {
   warnIgnoreMinutes: 10, // an ignored yellow warning comes back after this time at the latest
   logRetentionDays: 90, // daily logs (atem-alert-YYYY-MM-DD.log) older than this are deleted
   sessionRetentionDays: 365, // session files (logs/sessions/*.txt) older than this are deleted
+  beacon: true, // small always-on-top status dot the user places next to the guest's video
+  beaconSize: 28,
+  stopFrame: true, // flashing red border around all monitors when the recording has stopped
 }
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json')
 let settings = { ...DEFAULT_SETTINGS }
@@ -222,6 +227,21 @@ function send(channel, payload) {
 }
 function publish() {
   send('state', { ...st, ip: settings.ip, settings, version: app.getVersion(), now: Date.now() })
+  if (beacon) beacon.update(beaconLevel())
+  // screen frame only when the recording has really stopped (not for a lost connection: the ATEM may
+  // still be recording, and the frame would end up in the video)
+  if (frame) frame.update(!!(settings.stopFrame && st.alarm && (st.alarm.kind === 'stopped' || st.alarm.kind === 'unexpected')))
+}
+let frame = null
+// Beacon dot colour - most important first: alarm > cursor > warning > recording > offline > idle
+let beacon = null
+function beaconLevel() {
+  if (st.alarm) return 'alarm'
+  if (st.cursorOutside) return 'cursor'
+  if (st.warnings.length) return 'warning'
+  if (st.rec.state === 'recording') return 'rec'
+  if (st.connection !== 'connected') return 'offline'
+  return 'idle'
 }
 function fireEvent(type, extra) {
   if (type === 'rec-stop' || type === 'rec-stop-unexpected' || type === 'conn-lost') demandAttention()
@@ -788,6 +808,30 @@ function createWindow() {
   }
   win.on('focus', () => win.flashFrame(false))
 
+  beacon = createBeacon({
+    getSettings: () => settings,
+    saveSettings,
+    layoutKey,
+    log,
+    // click on the dot: bring this window to the front
+    onClick: () => {
+      if (!win || win.isDestroyed()) return
+      if (win.isMinimized()) win.restore()
+      win.show()
+      win.moveTop()
+      win.focus()
+    },
+    onSizeChanged: publish,
+  })
+  if (settings.beacon) beacon.open()
+  frame = createFrame({ log })
+  win.on('closed', () => {
+    beacon.close()
+    frame.hide()
+  })
+  screen.on('display-added', beacon.onDisplaysChanged)
+  screen.on('display-removed', beacon.onDisplaysChanged)
+
   // Crash recovery: if the display part crashes or hangs, reload it (the ATEM watching keeps running)
   win.webContents.on('render-process-gone', (_e, d) => {
     log('ERROR', 'Display process gone: ' + d.reason)
@@ -856,6 +900,21 @@ ipcMain.on('setAlwaysOnTop', (_e, v) => {
   if (win) win.setAlwaysOnTop(settings.alwaysOnTop)
   publish()
 })
+ipcMain.on('setBeacon', (_e, v) => {
+  settings.beacon = !!v
+  saveSettings()
+  if (settings.beacon) beacon.open()
+  else beacon.close()
+  log('APP', 'Beacon dot ' + (settings.beacon ? 'on' : 'off'))
+  publish()
+})
+ipcMain.on('setStopFrame', (_e, v) => {
+  settings.stopFrame = !!v
+  saveSettings()
+  log('APP', 'Screen frame on stop ' + (settings.stopFrame ? 'on' : 'off'))
+  publish()
+})
+ipcMain.on('setBeaconSize', (_e, v) => beacon && beacon.setSize(v))
 ipcMain.on('setVolume', (_e, v) => {
   settings.volume = Math.max(0, Math.min(1, Number(v) || 0))
   saveSettings()
@@ -1148,6 +1207,8 @@ if (process.env.ATEM_ALERT_TEST_HOOKS === '1') {
       setTimeout(() => atem.connect(settings.ip), ms)
     },
     cursorPoint: () => screen.getCursorScreenPoint(),
+    beaconLevel: () => (beacon && beacon.isOpen() ? beaconLevel() : 'closed'),
+    frameCount: () => (frame ? frame.count() : 0),
     displays: () => screen.getAllDisplays().map((d) => d.workArea),
     winBounds: () => win.getBounds(),
     setWinBounds: (b) => win.setBounds(b),

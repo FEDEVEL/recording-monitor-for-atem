@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0 (2026-11-28)
+### Added
+- **Beacon dot**: a small always-on-top status dot you drag next to your guest's video (red = recording, yellow = warning, blue = cursor, flashing = stopped). Click it to bring the app to the front; size in ⚙; it never moves or resizes by itself
+- **Screen frame on stop**: a flashing red frame around all monitors when the recording stops, until OK (not for a lost connection, as the ATEM may still be recording). Clicks pass through it
+
+### Changed
+- **Calm while recording**: dark background with a steady red ● (red = recording, like a camera); nothing blinks while everything is OK and the audio meters are dimmed. Only problems flash
+- **Cursor warning** is much more visible: the whole status area flashes blue with "MOVE CURSOR HERE"
+- Smoke test also checks the beacon dot and the screen frame
+
 ## 0.2.1 (2026-11-26)
 ### Added
 - Automated smoke test against a real ATEM (`npm run smoke-test`), ~50 checks, refuses to run while recording

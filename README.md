@@ -13,7 +13,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS-blue" alt="Platform: Windows | macOS">
   <img src="https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-lightgrey" alt="License: CC BY-NC-SA 4.0">
-  <img src="https://img.shields.io/badge/version-0.2.1-green" alt="Version 0.2.1">
+  <img src="https://img.shields.io/badge/version-0.3.0-green" alt="Version 0.3.0">
 </p>
 
 <p align="center">
@@ -32,15 +32,16 @@ This app sits in a corner of your monitor and makes a stopped recording **imposs
 
 ## Features
 
-- 🟢 **Big recording status** with recording time: *green* recording · *yellow* recording with a warning · *grey* not recording
-- 🔴 **Alarm when recording stops**: flashing red screen, sounds in your headphones, window jumps to the front.
+- 🔴 **Calm recording status** with recording time: a steady red **●** like a camera's REC light, nothing blinks while all is well · *yellow* text with a warning · *grey* not recording
+- 🔴 **Beacon dot**: a small dot you place next to your guest's video, so you see the status without looking away
+- 🚨 **Alarm when recording stops**: flashing red app, flashing red frame around all monitors, beacon dot flashing, sounds in your headphones, window jumps to the front.
   Stops with an ATEM error (disk full, disk error, disk removed, dropping frames…) or a lost connection are marked
   **UNEXPECTED** and the siren repeats until you acknowledge it
 - 🟡 **Early warnings**: low disk space, no / unformatted disk, ATEM error flags, no audio on MASTER, not connected
 - ⏱️ **Interview timer**: measures the real interview length, separate from the recording (which usually starts earlier and ends later)
 - ⚑ **Marks**: note moments to cut later, with the position in the recording file and the **ATEM timecode**
 - 📝 **Session files**: one text file per recording with all events and timecodes, ready for editing in DaVinci Resolve
-- 🖱️ **Cursor check**: warns when your mouse cursor is outside the app during an interview (so it isn't visible over your cameras or shared screen in the recording)
+- 🖱️ **Cursor check**: the app (and the beacon dot) flash blue when your mouse cursor is outside the app during an interview (so it isn't visible over your cameras or shared screen in the recording)
 - 🎚️ **Audio meters** for all active ATEM audio channels and MASTER
 - 🧾 **Event log**: the ATEM has no accessible crash log, so the app writes its own, which helps you find out *why* a recording stopped
 - 🪶 **Lightweight**: about 12 % of one CPU core with meters on, under 1 % with meters off
@@ -86,16 +87,17 @@ when a monitor appears or disappears.
 | Display | Meaning |
 |---|---|
 | grey **NOT RECORDING** | ATEM is connected and ready |
-| green **● RECORDING 00:12:34** | recording, everything OK |
+| dark, steady red **● RECORDING 00:12:34** | recording, everything OK (calm on purpose: nothing moves; the audio meters are dimmed) |
 | yellow **● RECORDING** + yellow bar | recording, but check the warning |
-| flashing red **RECORDING STOPPED** | recording stopped; click **OK – I have seen it** |
+| flashing blue **🖱 MOVE CURSOR HERE** | during an interview the mouse is outside this window – see [Cursor check](#cursor-check) |
+| flashing red **RECORDING STOPPED** | recording stopped; click **OK – I have seen it** (a flashing red frame also appears around all monitors until then) |
 | flashing red **UNEXPECTED RECORDING STOP!** | the ATEM reported an error when it stopped; the reason is shown |
 | flashing red **LOST CONNECTION TO ATEM** | the network connection dropped while recording |
 | dark yellow **NO CONNECTION** | the app can't reach the ATEM; it keeps retrying |
 
 ### Ignoring a yellow warning
 If you already know about a warning (for example *no audio* because no microphone is connected), click
-**✕ Ignore** on it: the status turns green again and a small grey line per ignored warning shows what is being
+**✕ Ignore** on it: the status turns calm again and a small grey line per ignored warning shows what is being
 ignored and when it comes back. Ignoring and returning warnings are also written to the session file.
 Ignoring is always **temporary**. The warning comes back:
 - when it **gets worse** (low disk space warns again below 15, 10 and 5 minutes left),
@@ -142,9 +144,34 @@ The recording usually starts before the interview and ends after it. The blue **
   interview timer where it stopped (the pause is not counted). It is offered for 60 minutes.
 - The timer survives an app restart.
 
+### Beacon dot
+You usually look at your guest's video, not at the app. The **beacon dot** is a small round dot that you drag next to
+the guest's video, so the status is always in your view:
+
+| Dot | Meaning |
+|---|---|
+| steady red | recording, everything OK |
+| dim grey | not recording |
+| grey ring | no connection to the ATEM |
+| slowly pulsing yellow | a warning – look at the app |
+| blinking blue | the mouse cursor is outside the app during an interview |
+| flashing red/white | the recording stopped – look at the app |
+
+- **Drag** it to move it; its position is remembered for each monitor setup. It never moves by itself.
+- **Click** it to bring the app to the front.
+- Set the size with **⚙ → Dot size**; it never changes size by itself (so it can't cover something you record).
+- It stays on top of other windows (also Zoom in full screen) and never takes the keyboard focus.
+- Switch it off with **⚙ → Beacon dot**.
+
+### Screen frame on stop
+When the recording stops, a thick **flashing red frame** appears around all monitors until you click **OK** in the
+app (or a new recording starts), so you notice it wherever you are looking. It appears only when the recording
+really stopped (nothing is being recorded at that moment), not for a lost connection (the ATEM may still be
+recording). Mouse clicks go through it. Switch it off with **⚙ → Screen frame on stop**.
+
 ### Cursor check
-During an interview, a flashing orange banner **🖱 CURSOR OUTSIDE THIS WINDOW** appears if the mouse has been outside
-the app for more than 3 seconds, so it can't end up visible over your cameras or shared screen in the recording.
+During an interview, the status area flashes **blue** with **🖱 MOVE CURSOR HERE** (and the beacon dot blinks blue)
+if the mouse has been outside the app for more than 3 seconds, so it can't end up visible over your cameras or shared screen in the recording.
 Switch it off in **⚙ → Cursor check**, or add a soft beep in **⚙ → Extra sounds**.
 
 ### Session files: timecodes for editing
@@ -168,6 +195,8 @@ A `~` before the position means it is approximate (the app was started while the
 |---|---|
 | **IP** | ATEM IP address |
 | **Always on top** | keep the window above other windows |
+| **Beacon dot / Dot size** | see [Beacon dot](#beacon-dot) |
+| **Screen frame on stop** | see [Screen frame on stop](#screen-frame-on-stop) |
 | **Extra sounds** | warnings, marks, connection lost/restored, cursor: all off by default (they may be recorded) |
 | **Audio meters** | off = lowest CPU use (also disables the "no audio" warning) |
 | **Cursor check** | see [Cursor check](#cursor-check) |

@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'" />
+    <title>Recording Monitor beacon</title>
+    <style>
+      html, body { margin: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; cursor: grab; user-select: none; }
+      #dot {
+        /* always a circle: sized from the smaller side of the window and centred - on monitors with
+           different scaling Windows can make the window slightly non-square */
+        position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+        width: calc(min(100vw, 100vh) - 4px); height: calc(min(100vw, 100vh) - 4px); border-radius: 50%;
+        box-sizing: border-box; border: 2px solid rgba(0, 0, 0, 0.75); /* dark rim: visible on any video */
+        background: #666; opacity: 0.6;
+      }
+      /* recording, all fine: steady red, no movement */
+      body.rec #dot { background: #e01b1b; opacity: 1; }
+      /* not recording / waiting: dim grey */
+      body.idle #dot { background: #777; opacity: 0.55; }
+      /* no connection to the ATEM: hollow grey ring */
+      body.offline #dot { background: transparent; border: 3px solid #888; opacity: 0.8; }
+      /* yellow warning: slow breathing */
+      body.warning #dot { background: #f5c400; opacity: 1; animation: breathe 1.6s ease-in-out infinite; }
+      /* cursor in the wrong place: blue blink */
+      body.cursor #dot { background: #2f7bff; opacity: 1; animation: blink 0.9s steps(1) infinite; }
+      /* recording stopped: red/white flashing, same size (2 per second, below photosensitivity limits) */
+      body.alarm #dot { background: #ff1a1a; opacity: 1; border-width: 4px; animation: alarm 0.5s steps(1) infinite; }
+      @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+      @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.15; } }
+      @keyframes alarm { 0% { background: #ff1a1a; } 50% { background: #ffffff; } }
+    </style>
+  </head>
+  <body class="idle" title="Recording Monitor – drag to move, click to show the app (size: ⚙ settings)">
+    <div id="dot"></div>
+    <script src="beacon.js"></script>
+  </body>
+</html>
